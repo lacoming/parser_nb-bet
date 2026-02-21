@@ -54,17 +54,26 @@ parser_nb-bet/
 └── dist/              # Артефакты сборки (не коммитятся)
 ```
 
+## Стек
+
+**C# 12 / .NET 8** — WinForms (UI + трей через `NotifyIcon`), `HttpClient`, `HtmlAgilityPack`, `ClosedXML`, `Microsoft.Data.Sqlite`, `Serilog`, `Polly`.
+
 ## Сборка
 
 ```powershell
-# Windows
-scripts/build.ps1
+# Установить .NET 8 SDK: https://dotnet.microsoft.com/download/dotnet/8.0
+
+# Release — self-contained .exe (~80 MB, без зависимостей)
+.\scripts\build.ps1
+
+# Debug
+.\scripts\build.ps1 -Configuration Debug
 ```
 
 ## Требования
 
 - Windows 10+
-- Python 3.11+ (для сборки)
+- [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) (только для сборки; готовый .exe не требует установки .NET)
 - Файлы конфигурации (`config.json`, `leagues.xlsx`)
 
 ## UX — окно и трей

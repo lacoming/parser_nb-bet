@@ -1,0 +1,43 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <AssemblyName>parser_nb-bet</AssemblyName>
+    <RootNamespace>ParserNbBet</RootNamespace>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
+    <ApplicationIcon>..\..\assets\icon.ico</ApplicationIcon>
+
+    <!-- Single-file self-contained publish -->
+    <PublishSingleFile>true</PublishSingleFile>
+    <SelfContained>true</SelfContained>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <PublishReadyToRun>true</PublishReadyToRun>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- HTML parsing -->
+    <PackageReference Include="HtmlAgilityPack" Version="1.11.*" />
+
+    <!-- Excel (no COM dependency) -->
+    <PackageReference Include="ClosedXML" Version="0.102.*" />
+
+    <!-- SQLite state store -->
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.*" />
+
+    <!-- HTTP retry policies -->
+    <PackageReference Include="Polly" Version="8.*" />
+    <PackageReference Include="Polly.Extensions.Http" Version="3.*" />
+
+    <!-- Logging with file sink -->
+    <PackageReference Include="Serilog" Version="4.*" />
+    <PackageReference Include="Serilog.Sinks.File" Version="6.*" />
+    <PackageReference Include="Serilog.Sinks.Console" Version="6.*" />
+    <PackageReference Include="Serilog.Extensions.Logging" Version="8.*" />
+  </ItemGroup>
+
+</Project>

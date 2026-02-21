@@ -1,73 +1,53 @@
-# scripts/build.ps1 — сборка parser_nb-bet в .exe
-# Использование: .\scripts\build.ps1 [-Debug] [-Clean]
+# scripts/build.ps1 — сборка parser_nb-bet в .exe через dotnet publish
+# Использование: .\scripts\build.ps1 [-Configuration Debug|Release] [-Clean]
+#
+# Требования: .NET 8 SDK (https://dotnet.microsoft.com/download/dotnet/8.0)
 
 param(
-    [switch]$Debug,
+    [ValidateSet("Debug","Release")]
+    [string]$Configuration = "Release",
     [switch]$Clean
 )
 
 $ErrorActionPreference = "Stop"
-$ProjectRoot = Split-Path $PSScriptRoot -Parent
-$DistDir = Join-Path $ProjectRoot "dist"
-$BuildDir = Join-Path $ProjectRoot "build"
+$ProjectRoot  = Split-Path $PSScriptRoot -Parent
+$ProjectFile  = Join-Path $ProjectRoot "src\ParserNbBet\ParserNbBet.csproj"
+$DistDir      = Join-Path $ProjectRoot "dist"
 
 Write-Host "=== parser_nb-bet Build ===" -ForegroundColor Cyan
-Write-Host "Project root: $ProjectRoot"
+Write-Host "Configuration : $Configuration"
+Write-Host "Project       : $ProjectFile"
+Write-Host "Output        : $DistDir"
 
-# Очистка
-if ($Clean) {
-    Write-Host "Cleaning dist/ and build/ ..." -ForegroundColor Yellow
-    if (Test-Path $DistDir) { Remove-Item $DistDir -Recurse -Force }
-    if (Test-Path $BuildDir) { Remove-Item $BuildDir -Recurse -Force }
+if ($Clean -and (Test-Path $DistDir)) {
+    Write-Host "Cleaning dist/ ..." -ForegroundColor Yellow
+    Remove-Item $DistDir -Recurse -Force
 }
 
-# Проверка venv
-$VenvPython = Join-Path $ProjectRoot ".venv\Scripts\python.exe"
-if (-not (Test-Path $VenvPython)) {
-    Write-Host "Creating virtual environment..." -ForegroundColor Yellow
-    python -m venv (Join-Path $ProjectRoot ".venv")
-}
-
-# Установка зависимостей
-Write-Host "Installing dependencies..." -ForegroundColor Yellow
-& $VenvPython -m pip install -q -r (Join-Path $ProjectRoot "requirements.txt")
-& $VenvPython -m pip install -q pyinstaller
-
-# Сборка
-$MainScript = Join-Path $ProjectRoot "src\main.py"
-$IconFile = Join-Path $ProjectRoot "assets\icon.ico"
-
-$PyInstallerArgs = @(
-    "--onefile",
-    "--windowed",
-    "--name", "parser_nb-bet",
-    "--distpath", $DistDir,
-    "--workpath", $BuildDir
+# dotnet publish: self-contained single-file exe for win-x64
+$publishArgs = @(
+    "publish", $ProjectFile,
+    "--configuration", $Configuration,
+    "--runtime",       "win-x64",
+    "--self-contained", "true",
+    "-p:PublishSingleFile=true",
+    "-p:IncludeNativeLibrariesForSelfExtract=true",
+    "--output", $DistDir
 )
 
-if (Test-Path $IconFile) {
-    $PyInstallerArgs += "--icon", $IconFile
-}
+Write-Host "Running: dotnet $($publishArgs -join ' ')" -ForegroundColor Gray
+dotnet @publishArgs
 
-if ($Debug) {
-    $PyInstallerArgs += "--debug", "all"
-    Write-Host "Building in DEBUG mode..." -ForegroundColor Yellow
-} else {
-    Write-Host "Building RELEASE..." -ForegroundColor Green
-}
-
-$PyInstallerArgs += $MainScript
-
-Write-Host "Running PyInstaller..." -ForegroundColor Cyan
-& $VenvPython -m PyInstaller @PyInstallerArgs
-
-if ($LASTEXITCODE -eq 0) {
-    $ExePath = Join-Path $DistDir "parser_nb-bet.exe"
-    if (Test-Path $ExePath) {
-        $Size = [math]::Round((Get-Item $ExePath).Length / 1MB, 2)
-        Write-Host "SUCCESS: $ExePath ($Size MB)" -ForegroundColor Green
-    }
-} else {
+if ($LASTEXITCODE -ne 0) {
     Write-Host "BUILD FAILED (exit code: $LASTEXITCODE)" -ForegroundColor Red
     exit $LASTEXITCODE
+}
+
+$ExePath = Join-Path $DistDir "parser_nb-bet.exe"
+if (Test-Path $ExePath) {
+    $SizeMB = [math]::Round((Get-Item $ExePath).Length / 1MB, 1)
+    Write-Host ""
+    Write-Host "SUCCESS: $ExePath ($SizeMB MB)" -ForegroundColor Green
+} else {
+    Write-Host "WARNING: exe not found at expected path" -ForegroundColor Yellow
 }

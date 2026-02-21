@@ -40,14 +40,25 @@
 **Сделано:**
 - Инициализирован git-репозиторий.
 - Созданы файлы: `README.md`, `ARCHITECTURE.md`, `PROGRESS.md`, `CONFIG.md`.
-- Структура папок: `src/{config,logging,state,nb,kush,decision,excel,telegram,scheduler,ui}`, `tests/`, `assets/customer/`, `scripts/`, `_legacy/`, `dist/`.
+- Структура папок: `src/ParserNbBet/{Config,Logging,State,Nb,Kush,Decision,Excel,Telegram,Scheduler,Ui}`, `tests/ParserNbBet.Tests/`, `assets/customer/`, `scripts/`, `_legacy/`, `dist/`.
 - `.gitignore` актуализирован.
-- Выбран стек: Python 3.11 + tkinter + pystray + httpx + BS4 + openpyxl + APScheduler + PyInstaller.
+- **Стек: C# 12 / .NET 8** (по требованию заказчика: нативный Windows, малый .exe, надёжность).
+  - UI: WinForms + NotifyIcon (трей из коробки)
+  - HTTP: HttpClient (stdlib)
+  - HTML: HtmlAgilityPack
+  - Excel: ClosedXML
+  - State: Microsoft.Data.Sqlite
+  - Scheduler: PeriodicTimer + TimeZoneInfo (stdlib)
+  - Retry: Polly
+  - Logging: Serilog
+  - Build: `dotnet publish --self-contained -r win-x64 -p:PublishSingleFile=true`
+- Созданы: `ParserNbBet.sln`, `ParserNbBet.csproj`, `Program.cs`, `CliArgs.cs`, `Ui/MainForm.cs`, `Ui/CloseDialog.cs`.
 
-**Context7:** Недоступен в среде выполнения — стек выбран на основе официальной документации и практики (зафиксировано).
+**Context7:** Недоступен в среде выполнения — стек выбран на основе официальной документации (зафиксировано).
 
-**Стек обоснован в `ARCHITECTURE.md`.**
+**Примечание:** Стек предложен в шаге 01 и подтверждён пользователем. Финальная фиксация — шаг 03.
 
 **Follow-ups:**
 - Шаг 02: распаковать и проанализировать _legacy-архивы (nb3.zip, kushvsporte_autostavka.zip).
-- После анализа legacy — возможна корректировка стека (зафиксировать в шаге 03).
+- Установить .NET 8 SDK для сборки.
+- Шаг 03: финально зафиксировать стек после анализа legacy.

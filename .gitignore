@@ -1,4 +1,4 @@
-# Secrets and local config
+# ── Secrets and local config ──────────────────────────────────────────────────
 config.json
 proxies.txt
 *.env
@@ -8,51 +8,35 @@ proxies.txt
 assets/customer/
 leagues.xlsx
 
-# Python
-__pycache__/
-*.py[cod]
-*.pyo
-*.pyd
-.Python
-*.egg
-*.egg-info/
+# ── C# / .NET ─────────────────────────────────────────────────────────────────
+bin/
+obj/
+*.user
+*.suo
+.vs/
+_ReSharper*/
+*.DotSettings.user
+TestResults/
+*.nupkg
+*.snupkg
+
+# ── Build artifacts ───────────────────────────────────────────────────────────
 dist/
 build/
-.eggs/
-pip-wheel-metadata/
-*.whl
 
-# Virtual environments
-.venv/
-venv/
-env/
-ENV/
-
-# PyInstaller build artifacts
-dist/
-build/
-*.spec.bak
-
-# Logs and output
+# ── Logs and output ───────────────────────────────────────────────────────────
 logs/
 *.log
 output/
 *.xlsx
 !config.example.json
 
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# OS
+# ── OS ────────────────────────────────────────────────────────────────────────
 Thumbs.db
 Desktop.ini
 .DS_Store
 
-# Testing
-.pytest_cache/
-.coverage
-htmlcov/
-.tox/
+# ── IDE ───────────────────────────────────────────────────────────────────────
+.idea/
+*.swp
+*.swo

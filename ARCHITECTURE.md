@@ -2,155 +2,181 @@
 
 ## Выбранный стек
 
-> Context7 MCP недоступен в текущей среде — стек выбран на основе официальной документации и практики.
-> Зафиксировано в PROGRESS.md (шаг 01).
+> Стек зафиксирован по требованию заказчика: C# / .NET 8, минимальный вес, надёжность, нативный Windows.
+> Context7 MCP недоступен в текущей среде — уточнение API через официальную документацию, отмечено в PROGRESS.md.
 
 | Компонент | Технология | Обоснование |
 |-----------|-----------|-------------|
-| Язык | **Python 3.11** | Лучшая экосистема для парсинга/Excel/Telegram, хорошая поддержка PyInstaller |
-| UI окно | **tkinter** (stdlib) | Встроен в Python, нет зависимостей, достаточно для статусного окна |
-| Трей | **pystray** | Минимальная библиотека, Windows-native трей, PIL/Pillow для иконки |
-| HTTP | **httpx** | Async-capable, нативная поддержка прокси, retries через tenacity |
-| Парсинг HTML | **BeautifulSoup4** + **lxml** | Стандарт, быстрый парсер |
-| Динамические страницы | **playwright** (только если нужно, по факту анализа) | Резерв |
-| Excel | **openpyxl** | Нативная работа с .xlsx, шаблоны, mapping-слой |
-| Telegram | **httpx** (Bot API напрямую) | Без тяжёлых фреймворков, rate-limit своими руками |
-| Состояние | **SQLite** (stdlib sqlite3) | Надёжно, нет лишних зависимостей |
-| Планировщик | **APScheduler** | Поддержка timezone (MSK/pytz), cron-style и interval |
-| Сборка .exe | **PyInstaller** | Де-факто стандарт для Python→.exe, хорошая поддержка Windows |
-| Retries/backoff | **tenacity** | Простая декораторная схема |
-| Timezone | **pytz** | MSK (Europe/Moscow) |
+| Язык | **C# 12 / .NET 8** | Нативный Windows, быстрый, типобезопасный, отличная поддержка WinForms |
+| UI окно | **WinForms** (`System.Windows.Forms`) | Встроен в .NET, нативные диалоги, нет зависимостей |
+| Трей | **`NotifyIcon`** (WinForms stdlib) | Нативный Windows-трей из коробки, контекстное меню, иконка |
+| HTTP | **`HttpClient`** (stdlib) | Встроен в .NET, пул соединений, proxy support |
+| Парсинг HTML | **HtmlAgilityPack** (NuGet) | Стандарт для C#, XPath/LINQ, малый вес |
+| Динамические страницы | **PuppeteerSharp** (резерв, только если нужно) | Если сайт требует JS-рендеринг |
+| Excel | **ClosedXML** (NuGet) | Хороший API, поддержка шаблонов, без COM |
+| Telegram | **`HttpClient`** напрямую (Bot API) | Без тяжёлых SDK, rate-limit руками |
+| Состояние | **SQLite** через `Microsoft.Data.Sqlite` (NuGet) | Надёжно, транзакции, нет внешних зависимостей |
+| Планировщик | **`PeriodicTimer`** + **`TimeZoneInfo`** (stdlib) | Встроен в .NET 6+, timezone MSK через TimeZoneInfo |
+| Retry/backoff | **Polly** (NuGet) | Декларативные retry-политики |
+| Сборка .exe | **`dotnet publish`** | `--self-contained -r win-x64 -p:PublishSingleFile=true` |
+| Логирование | **`Microsoft.Extensions.Logging`** + файловый sink | Или Serilog для ротации файлов |
+
+---
+
+## Структура решения (C#)
+
+```
+parser_nb-bet/
+├── ParserNbBet.sln
+├── src/
+│   └── ParserNbBet/               # Основной проект
+│       ├── ParserNbBet.csproj     # WinForms, net8.0-windows
+│       ├── Program.cs             # Точка входа (args парсинг, запуск)
+│       ├── Config/                # Загрузка/валидация config.json
+│       ├── Logging/               # Настройка логирования
+│       ├── State/                 # SQLite — очередь, дедуп
+│       ├── Nb/                    # Парсер nb-bet.com
+│       ├── Kush/                  # KushClient + Matcher + BetPlacer
+│       ├── Decision/              # DecisionEngine + LeagueFilter
+│       ├── Excel/                 # ExcelWriter (ClosedXML)
+│       ├── Telegram/              # TelegramNotifier
+│       ├── Scheduler/             # Планировщик (PeriodicTimer)
+│       └── Ui/                    # WinForms окно + NotifyIcon
+├── tests/
+│   └── ParserNbBet.Tests/         # xUnit тесты
+│       └── ParserNbBet.Tests.csproj
+├── scripts/
+│   └── build.ps1                  # dotnet publish → dist/
+├── assets/
+│   ├── icon.ico
+│   └── customer/                  # Шаблоны заказчика
+├── _legacy/                       # Существующий код (не смешивать)
+└── dist/                          # Артефакты сборки (не в git)
+```
 
 ---
 
 ## Компоненты системы
 
-### ParserNB
+### ParserNB (`Nb/`)
 - **Назначение:** Получить список текущих матчей с `nb-bet.com/Results`.
-- **Вход:** config (proxy, timeouts, retries).
-- **Выход:** `list[Match]` — нормализованный список матчей.
-- **Детали:** Анализируем HTML/API (шаг 05). Если сайт использует JS-рендеринг — подключаем playwright.
-- **Файлы:** `src/nb/`
+- **Вход:** `AppConfig` (proxy, timeouts, retries).
+- **Выход:** `IReadOnlyList<Match>`.
+- **Детали:** Анализируем HTML/API в шаге 05. HttpClient + HtmlAgilityPack.
+- **Namespace:** `ParserNbBet.Nb`
 
-### LeagueFilter
+### LeagueFilter (`Decision/`)
 - **Назначение:** Отфильтровать матчи по списку лиг из `leagues.xlsx`.
-- **Вход:** `list[Match]`, путь к `leagues.xlsx`.
-- **Выход:** `list[Match]` — только совпавшие лиги.
-- **Файлы:** `src/decision/league_filter.py`
+- **Вход:** `IEnumerable<Match>`, путь к `leagues.xlsx`.
+- **Выход:** `IEnumerable<Match>` — только совпавшие лиги.
+- **Namespace:** `ParserNbBet.Decision`
 
-### DecisionEngine
+### DecisionEngine (`Decision/`)
 - **Назначение:** Применить правила ставок по ТЗ.
-- **Вход:** `Match` (odds1, oddsX, odds2).
-- **Выход:** `Decision(bet_type, passes, reasons[])`.
+- **Вход:** `Match` (Odds1, OddsX, Odds2).
+- **Выход:** `Decision { BetType, Passes, Reasons }`.
 - **Правила:**
   - Если kf1 > kf2 → ветка "1X / 1"
   - Если kf2 > kf1 → ветка "2 / X"
   - Точные пороги — из ТЗ, зафиксируем в шаге 06.
-- **Файлы:** `src/decision/engine.py`
+- **Namespace:** `ParserNbBet.Decision`
 
-### Matcher (NB ↔ Kush)
+### Matcher (`Kush/`)
 - **Назначение:** Сопоставить матч NB с событием на Куше.
 - **Алгоритм:**
-  - Нормализация команд: casefold, удаление пунктуации, транслитерация.
+  - Нормализация: ToLower, удаление пунктуации, транслитерация.
   - Допуск по времени: ±2 часа (настраивается).
-  - Confidence score (fuzzy match по названиям команд).
-- **Порог доверия:** < 0.80 → не ставим, только лог.
-- **Файлы:** `src/kush/matcher.py`
+  - Confidence score (Levenshtein/fuzzy по названиям команд).
+- **Порог:** < 0.80 → не ставим, только лог.
+- **Namespace:** `ParserNbBet.Kush`
 
-### KushClient
+### KushClient (`Kush/`)
 - **Назначение:** Получить список событий с `kushvsporte.ru`.
 - **Методы:**
-  - `get_events()` → `list[KushEvent]`
-  - `find_event(nb_match)` → `KushEvent | None`
-- **Файлы:** `src/kush/client.py`
+  - `GetEventsAsync()` → `IReadOnlyList<KushEvent>`
+  - `FindEventAsync(Match)` → `KushEvent?`
+- **Namespace:** `ParserNbBet.Kush`
 
-### KushBetPlacer
+### KushBetPlacer (`Kush/`)
 - **Назначение:** Проставить ставку на Куше.
 - **Формула:** `KfKush * (1 + ROI) / KfNB > threshold`
   - threshold: 1.10 (обычные), 1.05 (big leagues)
-- **Dry-run:** не делает реальных запросов, только логирует.
-- **Файлы:** `src/kush/bet_placer.py`
+- **Dry-run:** флаг — не делает реальных запросов, только логирует.
+- **Namespace:** `ParserNbBet.Kush`
 
-### PendingQueue (State)
-- **Назначение:** Очередь матчей, ожидающих появления на Куше.
-- **Реализация:** SQLite таблица `pending_matches`.
-- **Дедупликация:** по `match_key` (league + teams + date).
-- **Файлы:** `src/state/`
+### StateStore (`State/`)
+- **Назначение:** Очередь матчей, ожидающих появления на Куше. Дедупликация.
+- **Реализация:** SQLite, таблица `pending_matches`.
+- **Ключ дедупа:** `match_key` = `{league}|{home}|{away}|{date}`.
+- **Namespace:** `ParserNbBet.State`
 
-### ExcelWriter
+### ExcelWriter (`Excel/`)
 - **Назначение:** Записать результаты в `.xlsx` по шаблону заказчика.
-- **Mapping-слой:** легко подменить колонки без изменения логики.
-- **Выходные файлы:** `output/<date>_results.xlsx`.
-- **Файлы:** `src/excel/`
+- **Mapping-слой:** `IColumnMapper` — легко подменить колонки.
+- **Выходные файлы:** `output/{yyyy-MM-dd}_results.xlsx`.
+- **Namespace:** `ParserNbBet.Excel`
 
-### TelegramNotifier
+### TelegramNotifier (`Telegram/`)
 - **Назначение:** Отправить уведомления в Telegram.
-- **События:**
-  - Match найден и проходит фильтры.
-  - Отсутствует на Куше.
-  - Ставка проставлена.
-  - Критическая ошибка.
-- **Файлы:** `src/telegram/`
+- **События:** MatchFound, MissingOnKush, BetPlaced, CriticalError.
+- **Namespace:** `ParserNbBet.Telegram`
 
-### Scheduler
+### Scheduler (`Scheduler/`)
 - **Назначение:** Запускать цикл по расписанию.
-- **Режимы:**
-  - `--once`: один цикл и выход.
-  - `--daemon`: 08:00 МСК, каждые 4 часа, окно 14 дней.
-- **Graceful shutdown:** Ctrl+C, сигнал из UI.
-- **Файлы:** `src/scheduler/`
+- **Режимы:** `--once`, `--daemon`.
+- **Расписание:** 08:00 МСК (`TimeZoneInfo.FindSystemTimeZoneById("Russian Standard Time")`), каждые 4 часа, окно 14 дней.
+- **Graceful shutdown:** `CancellationToken`.
+- **Namespace:** `ParserNbBet.Scheduler`
 
-### UI + Tray
-- **Назначение:** Окно статуса + трей.
+### UI + Tray (`Ui/`)
+- **Назначение:** WinForms окно статуса + `NotifyIcon` трей.
 - **UX:**
-  - Старт → окно открыто.
-  - Кнопка "Скрыть" → трей.
-  - X → диалог "Выйти/Свернуть".
-  - Трей правый клик: "Открыть окно", "Выход".
+  - Старт → окно открыто (`MainForm.Show()`).
+  - Кнопка "Скрыть" → `this.Hide()` + трей.
+  - X (`FormClosing`) → модальный диалог "Выйти/Свернуть" (`MessageBox` или кастомный `Form`).
+  - Трей (`NotifyIcon.ContextMenuStrip`): "Открыть окно", "Выход".
 - **Статус в окне:** last run, next run, total matches, placed bets.
-- **Файлы:** `src/ui/`
+- **Namespace:** `ParserNbBet.Ui`
 
 ---
 
-## Модель данных
+## Модели данных (C#)
 
-### Match
-```python
-@dataclass
-class Match:
-    match_key: str           # Стабильный ключ (league + teams + date)
-    league: str
-    team_home: str
-    team_away: str
-    start_time: datetime     # UTC
-    nb_url: str
-    odds1: float | None
-    oddsX: float | None
-    odds2: float | None
-    odds1X: float | None     # Вычисляется: min(odds1, oddsX)
-```
+```csharp
+// Nb/Models.cs
+public record Match(
+    string MatchKey,       // "{league}|{home}|{away}|{date:yyyyMMdd}"
+    string League,
+    string TeamHome,
+    string TeamAway,
+    DateTime StartTimeUtc,
+    string NbUrl,
+    double? Odds1,
+    double? OddsX,
+    double? Odds2
+) {
+    public double? Odds1X => (Odds1.HasValue && OddsX.HasValue)
+        ? Math.Min(Odds1.Value, OddsX.Value) : null;
+}
 
-### Decision
-```python
-@dataclass
-class Decision:
-    match_key: str
-    bet_type: str            # "1X" | "1" | "2" | "X" | "skip"
-    passes: bool
-    reasons: list[str]
-```
+// Decision/Models.cs
+public record Decision(
+    string MatchKey,
+    string BetType,    // "1X" | "1" | "2" | "X" | "skip"
+    bool Passes,
+    IReadOnlyList<string> Reasons
+);
 
-### KushEvent
-```python
-@dataclass
-class KushEvent:
-    kush_id: str
-    league: str
-    team_home: str
-    team_away: str
-    start_time: datetime
-    odds: dict[str, float]   # {"1": 1.85, "X": 3.5, "2": 2.1}
-    url: str
+// Kush/Models.cs
+public record KushEvent(
+    string KushId,
+    string League,
+    string TeamHome,
+    string TeamAway,
+    DateTime StartTimeUtc,
+    IReadOnlyDictionary<string, double> Odds,
+    string Url
+);
 ```
 
 ---
@@ -158,30 +184,29 @@ class KushEvent:
 ## Поток данных (один цикл)
 
 ```
-ParserNB.get_matches()
-    → LeagueFilter.filter()
-        → DecisionEngine.decide()
-            → [for each passing match]
-                → KushClient.find_event()
-                    → [found] → BetPlacer.place() (если ratio OK)
-                              → TelegramNotifier.notify("placed")
-                              → ExcelWriter.write_row()
-                    → [not found] → PendingQueue.enqueue()
-                                  → TelegramNotifier.notify("missing")
-    → ExcelWriter.save()
-    → Scheduler.schedule_next()
+ParserNB.GetMatchesAsync()
+    → LeagueFilter.Filter()
+        → DecisionEngine.Decide()
+            → foreach passing match:
+                → KushClient.FindEventAsync()
+                    → found  → BetPlacer.PlaceAsync() (если ratio OK)
+                              → TelegramNotifier.NotifyPlaced()
+                              → ExcelWriter.WriteRow()
+                    → null   → StateStore.Enqueue()
+                              → TelegramNotifier.NotifyMissing()
+    → ExcelWriter.SaveAsync()
+    → Scheduler.ScheduleNext()
 ```
 
 ---
 
 ## Matching NB ↔ Kush — правила
 
-1. Нормализация команды: `lower() → strip punctuation → translit (рус→лат при необходимости)`.
-2. Fuzzy match по двум командам (home + away).
+1. Нормализация: `ToLower() → Remove punctuation → Transliterate (ru→en если нужно)`.
+2. Fuzzy match по двум командам (home + away) — Levenshtein similarity.
 3. Проверка времени: `|nb_start - kush_start| ≤ 2h`.
-4. Confidence = `(name_score * 0.7) + (time_score * 0.3)`.
-5. Порог: ≥ 0.80 → матч принят.
-6. Если confidence < 0.80 → не ставим, только лог (никогда не ставить при низком доверии).
+4. `Confidence = nameScore * 0.7 + timeScore * 0.3`.
+5. Порог: ≥ 0.80 → матч принят. Ниже → только лог, никакой ставки.
 
 ---
 
@@ -189,8 +214,11 @@ ParserNB.get_matches()
 
 | Решение | Обоснование |
 |---------|-------------|
-| tkinter + pystray (не Electron) | Малый размер .exe, нет Node.js |
-| SQLite (не Redis/файл) | Встроен в Python, надёжен, транзакции |
-| httpx вместо aiohttp | Синхронный режим проще для одного потока + async резерв |
-| APScheduler вместо cron | Работает внутри процесса, Windows-совместим |
-| PyInstaller --onefile | Единый .exe, проще для заказчика |
+| WinForms + NotifyIcon (не Electron/Qt) | Нативный Windows, малый .exe, нет доп. рантайма |
+| `dotnet publish --self-contained` | Единый .exe без установки .NET на машину заказчика |
+| `PeriodicTimer` вместо Quartz.NET | Встроен в .NET 6+, нет зависимостей |
+| `TimeZoneInfo` вместо NodaTime | Stdlib, MSK = "Russian Standard Time" |
+| SQLite вместо файла/JSON | Транзакции, надёжность, дедупликация без race conditions |
+| ClosedXML вместо Interop | Без COM/Excel установленного, кросс-сборка |
+| Polly для retry | Стандарт в .NET экосистеме, декларативные политики |
+| Нет `async` в UI-потоке | `Task.Run` + `Invoke` для обновления UI из фона |
