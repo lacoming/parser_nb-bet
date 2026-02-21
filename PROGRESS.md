@@ -19,7 +19,7 @@ C# код остаётся в ветке `main`/`master` как бэкап.
 | 04 | Matcher NB ↔ Kush | ✅ DONE | 2026-02-21 |
 | 05 | Kush client (session, events, odds) | ✅ DONE | 2026-02-21 |
 | 06 | Kush bet placer + dry-run | ✅ DONE | 2026-02-21 |
-| 07 | Telegram уведомления | ⬜ TODO | — |
+| 07 | Telegram уведомления | ✅ DONE | 2026-02-21 |
 | 08 | Excel writer | ⬜ TODO | — |
 | 09 | Scheduler + режимы запуска | ⬜ TODO | — |
 | 10 | Tkinter UI | ⬜ TODO | — |
@@ -126,3 +126,19 @@ C# код остаётся в ветке `main`/`master` как бэкап.
 
 **Follow-ups:**
 - Step 07: Telegram уведомления
+
+## Шаг 07 — DONE (2026-02-21)
+**Задача:** Telegram уведомления.
+
+**Сделано:**
+- `src/telegram/notifier.py` — TelegramNotifier: sendMessage, sendDocument, MarkdownV2 + fallback
+- Методы: notify_placed, notify_missing, notify_critical, notify_cycle_summary, send_test, send_document
+- escape_md2 для безопасного экранирования спецсимволов MarkdownV2
+- Rate-limit между сообщениями (configurable)
+- Broadcast на все chat_ids с retry (MD2 → plain text fallback)
+- `--test-telegram` интегрирован в main.py
+- `tests/test_telegram.py` — 26 тестов
+- Все 206 тестов проходят
+
+**Follow-ups:**
+- Step 08: Excel writer

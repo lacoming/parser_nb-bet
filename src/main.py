@@ -58,7 +58,22 @@ def main() -> None:
 
     # Test telegram mode
     if args.test_telegram:
-        logger.info("--test-telegram: will send test message (TODO step 07)")
+        from src.telegram.notifier import TelegramNotifier
+
+        tg = TelegramNotifier(
+            token=config.telegram.token,
+            chat_ids=config.telegram.chat_ids,
+            rate_limit=config.telegram.rate_limit_seconds,
+        )
+        if not tg.enabled:
+            logger.error("Telegram not configured (token or chat_ids missing)")
+            sys.exit(1)
+        results = tg.send_test()
+        for r in results:
+            if r.ok:
+                logger.info("Test message sent to chat %s", r.chat_id)
+            else:
+                logger.error("Failed to send to chat %s: %s", r.chat_id, r.error)
         return
 
     # Run mode
