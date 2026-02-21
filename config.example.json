@@ -6,9 +6,9 @@
     "enabled": true
   },
   "telegram": {
-    "token": "YOUR_BOT_TOKEN_HERE",
-    "chat_ids": [123456789],
-    "dev_chat_id": 123456789,
+    "token": "",
+    "chat_ids": [],
+    "dev_chat_id": 0,
     "rate_limit_seconds": 1.0
   },
   "proxies": {
@@ -33,23 +33,23 @@
   },
   "kush": {
     "base_url": "https://kushvsporte.ru/",
-    "login": "YOUR_LOGIN_HERE",
-    "password": "YOUR_PASSWORD_HERE",
+    "login": "",
+    "password": "",
     "dry_run": true,
     "default_stake": 100,
     "match_time_tolerance_hours": 2,
     "min_confidence": 0.80
   },
   "nb": {
-    "base_url": "https://nb-bet.com/Results",
+    "base_url": "https://app.nb-bet.com",
     "timeout_seconds": 30,
     "retries": 3,
     "retry_delay_seconds": 5
   },
   "logging": {
-    "level": "INFO",
-    "max_bytes": 10485760,
-    "backup_count": 5,
-    "format": "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+    "level": "Information",
+    "file_size_limit_bytes": 10485760,
+    "retained_file_count": 5,
+    "output_template": "{Timestamp:yyyy-MM-dd HH:mm:ss.fff} [{Level:u3}] {SourceContext}: {Message:lj}{NewLine}{Exception}"
   }
 }

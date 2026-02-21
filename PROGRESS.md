@@ -8,7 +8,7 @@
 | 01 | Инициализация репо и каркас проекта | ✅ DONE | 2026-02-21 |
 | 02 | Анализ существующих архивов (_legacy) | ✅ DONE | 2026-02-21 |
 | 03 | Выбор финального стека и план сборки | ✅ DONE | 2026-02-21 |
-| 04 | Конфигурация, логирование, хранение состояния | ⬜ TODO | — |
+| 04 | Конфигурация, логирование, хранение состояния | ✅ DONE | 2026-02-21 |
 | 05 | Парсер nb-bet Results (MVP) | ⬜ TODO | — |
 | 06 | Фильтр по лигам + бизнес-условия ставок | ⬜ TODO | — |
 | 07 | Matcher NB ↔ Kush | ⬜ TODO | — |
@@ -120,3 +120,26 @@
 - Шаг 04: config loader, Serilog, SQLite state
 - Шаг 13: добавить icon.ico
 - Шаг 14: полный publish + замер размера .exe
+
+---
+
+## Шаг 04 — DONE (2026-02-21)
+**Задача:** Конфигурация, логирование, хранение состояния.
+
+**Сделано:**
+- `config.example.json` обновлён: Serilog-формат, все ключи из CONFIG.md, без секретов
+- `Config/AppConfig.cs` — strongly-typed модель конфигурации (9 секций: schedule, telegram, proxies, thresholds, files, ui, kush, nb, logging)
+- `Config/ConfigLoader.cs` — загрузка JSON, env overrides (NB_TG_TOKEN, NB_DRY_RUN), валидация с множественными ошибками, `ConfigValidationException`
+- `Logging/LoggingSetup.cs` — Serilog: file sink (ротация по размеру, retained count) + console sink, настраиваемый уровень и шаблон
+- `State/StateStore.cs` — SQLite: таблицы `pending_matches` + `placed_bets`, деdup по match_key (INSERT OR IGNORE), CRUD: Enqueue, GetDuePending, UpdateNextCheck, RemovePending, RecordBet, IsKnown, PendingCount
+- `Program.cs` — подключен config + logging + state при запуске, "boot ok" в лог
+- 8 тестов ConfigTests: defaults, JSON parse, validation (interval, roi, ratio, start_time, multiple errors, pass)
+- 7 тестов StateStoreTests: init, enqueue, dedup, IsKnown, remove, due pending, record bet
+
+**Проверки:**
+- `dotnet build --configuration Release` ✅ (0 ошибок, 0 предупреждений)
+- `dotnet test` ✅ (15/15 passed)
+
+**Follow-ups:**
+- Шаг 05: NB-Bet парсер (использовать JSON API из legacy)
+- Шаг 06: leagues + DecisionEngine

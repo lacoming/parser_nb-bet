@@ -1,4 +1,8 @@
+using ParserNbBet.Config;
+using ParserNbBet.Logging;
+using ParserNbBet.State;
 using ParserNbBet.Ui;
+using Serilog;
 
 namespace ParserNbBet;
 
@@ -20,28 +24,68 @@ static class Program
     {
         var parsed = CliArgs.Parse(args);
 
-        // Headless --once mode: no WinForms, just run cycle and exit
-        if (parsed.Once)
+        // Load configuration
+        AppConfig config;
+        try
         {
-            RunHeadless(parsed);
+            config = ConfigLoader.Load(parsed.ConfigPath);
+        }
+        catch (ConfigValidationException ex)
+        {
+            Console.Error.WriteLine(ex.Message);
+            Environment.ExitCode = 1;
             return;
         }
 
-        // WinForms application (--daemon or default interactive)
-        Application.EnableVisualStyles();
-        Application.SetCompatibleTextRenderingDefault(false);
-        Application.SetHighDpiMode(HighDpiMode.SystemAware);
+        // Apply CLI overrides
+        if (parsed.DryRun)
+            config.Kush.DryRun = true;
 
-        Application.Run(new MainForm(parsed));
+        // Initialize logging
+        LoggingSetup.Initialize(config);
+
+        try
+        {
+            Log.Information("parser_nb-bet starting...");
+            Log.Information("  mode:     {Mode}", parsed.Once ? "once" : parsed.Daemon ? "daemon" : "ui");
+            Log.Information("  dry-run:  {DryRun}", config.Kush.DryRun);
+            Log.Information("  config:   {ConfigPath}", parsed.ConfigPath);
+
+            // Verify state store can initialize
+            using var state = new StateStore();
+            Log.Information("  state:    ok (pending={PendingCount})", state.PendingCount());
+
+            Log.Information("boot ok");
+
+            // Headless --once mode: no WinForms, just run cycle and exit
+            if (parsed.Once)
+            {
+                RunHeadless(parsed, config, state);
+                return;
+            }
+
+            // WinForms application (--daemon or default interactive)
+            Application.EnableVisualStyles();
+            Application.SetCompatibleTextRenderingDefault(false);
+            Application.SetHighDpiMode(HighDpiMode.SystemAware);
+
+            Application.Run(new MainForm(parsed));
+        }
+        catch (Exception ex)
+        {
+            Log.Fatal(ex, "Unhandled exception");
+            throw;
+        }
+        finally
+        {
+            Log.CloseAndFlush();
+        }
     }
 
-    static void RunHeadless(CliArgs args)
+    static void RunHeadless(CliArgs args, AppConfig config, StateStore state)
     {
-        // Stub — will be implemented in Step 04 (config) + Step 12 (scheduler)
-        Console.WriteLine("parser_nb-bet starting...");
-        Console.WriteLine($"  mode:     once");
-        Console.WriteLine($"  dry-run:  {args.DryRun}");
-        Console.WriteLine($"  config:   {args.ConfigPath}");
-        Console.WriteLine("boot ok");
+        // Stub — will be filled in Step 05 (parser) + Step 12 (scheduler)
+        Log.Information("Headless cycle starting...");
+        Log.Information("Headless cycle complete.");
     }
 }
