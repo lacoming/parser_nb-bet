@@ -13,8 +13,8 @@ C# код остаётся в ветке `main`/`master` как бэкап.
 | # | Шаг | Статус | Дата |
 |---|-----|--------|------|
 | 00 | Git setup + переписать docs | ✅ DONE | 2026-02-21 |
-| 01 | Скелет + config + logging | ⬜ TODO | — |
-| 02 | NB-Bet парсер (JSON API) | ⬜ TODO | — |
+| 01 | Скелет + config + logging | ✅ DONE | 2026-02-21 |
+| 02 | NB-Bet парсер (JSON API) | ✅ DONE | 2026-02-21 |
 | 03 | Фильтр лиг + DecisionEngine | ⬜ TODO | — |
 | 04 | Matcher NB ↔ Kush | ⬜ TODO | — |
 | 05 | Kush client (session, events, odds) | ⬜ TODO | — |
@@ -48,3 +48,33 @@ C# код остаётся в ветке `main`/`master` как бэкап.
 
 **Follow-ups:**
 - Step 01: config loader, logging setup, state module
+
+## Шаг 01 — DONE (2026-02-21)
+**Задача:** Скелет проекта: argparse, config, logging, state.
+
+**Сделано:**
+- `src/main.py` — argparse: --once, --daemon, --dry-run, --test-telegram, --config
+- `src/config/schema.py` — 9 dataclass-моделей конфигурации с defaults
+- `src/config/loader.py` — JSON loader + env overrides (NB_TG_TOKEN, NB_DRY_RUN) + validation
+- `src/log_setup.py` — RotatingFileHandler + console + optional UI handler
+- `src/state.py` — AppState: pending queue, placed set, known set, recheck logic
+- `tests/test_config.py` — 12 тестов
+- `tests/test_state.py` — 11 тестов
+- Smoke run: `python -m src.main --once --dry-run` — OK
+- Коммит: `4e93a72`
+
+**Follow-ups:**
+- Step 02: NB-Bet JSON API parser
+
+## Шаг 02 — DONE (2026-02-21)
+**Задача:** NB-Bet JSON API парсер.
+
+**Сделано:**
+- `src/nb/models.py` — Match dataclass (match_key, odds, odds_1x_end property)
+- `src/nb/client.py` — NbClient: get_matches(), retry с backoff, proxy rotation
+- `src/nb/odds_decoder.py` — sl_keys.json loader + decode (портировано из legacy)
+- `tests/test_nb_client.py` — 33 теста (model, parse, util, decoder, client mock)
+- Коммит: `849fddd`
+
+**Follow-ups:**
+- Step 03: League filter + DecisionEngine
