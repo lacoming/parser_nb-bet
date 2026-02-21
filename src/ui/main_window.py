@@ -306,6 +306,22 @@ class MainWindow:
             except tk.TclError:
                 pass
 
+    def show_cycle_result(self, stats_text: str) -> None:
+        """Show a popup with cycle results. Thread-safe."""
+        if self._destroyed:
+            return
+
+        def _show() -> None:
+            messagebox.showinfo("Результат", stats_text)
+
+        if threading.current_thread() is threading.main_thread():
+            _show()
+        else:
+            try:
+                self.root.after(0, _show)
+            except tk.TclError:
+                pass
+
     def show(self) -> None:
         """Show/restore window after hide."""
         self.root.deiconify()

@@ -305,6 +305,28 @@ class TestMainWindow:
         window.log_text.configure(state=tk.DISABLED)
         assert line_count <= 105  # some slack for Tk line counting
 
+    # --- show_cycle_result ---
+
+    def test_show_cycle_result_on_main_thread(self, window, monkeypatch):
+        shown = []
+        monkeypatch.setattr(
+            "src.ui.main_window.messagebox.showinfo",
+            lambda title, msg: shown.append((title, msg)),
+        )
+        window.show_cycle_result("test stats")
+        assert len(shown) == 1
+        assert shown[0] == ("Результат", "test stats")
+
+    def test_show_cycle_result_after_destroy_noop(self, window, monkeypatch):
+        shown = []
+        monkeypatch.setattr(
+            "src.ui.main_window.messagebox.showinfo",
+            lambda title, msg: shown.append(1),
+        )
+        window._destroyed = True
+        window.show_cycle_result("should not show")
+        assert len(shown) == 0
+
     # --- set_status when destroyed ---
 
     def test_set_status_after_destroy_noop(self, window):

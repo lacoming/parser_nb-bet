@@ -104,7 +104,7 @@ class TestE2EDryRun:
         nb_client.get_matches.return_value = [match]
 
         # League settings: allow Premier League
-        league_settings = [LeagueSetting(sport="football", leagues=["Premier League"])]
+        league_settings = [LeagueSetting(bet_type="1", leagues=["Premier League"])]
         league_filter = LeagueFilter(settings=league_settings)
         decision_engine = DecisionEngine()
         excel_writer = ExcelWriter(output_dir=str(tmp_path))
@@ -182,7 +182,7 @@ class TestE2EDryRun:
         nb_client = MagicMock()
         nb_client.get_matches.return_value = []
 
-        league_settings = [LeagueSetting(sport="football", leagues=["Premier League"])]
+        league_settings = [LeagueSetting(bet_type="1", leagues=["Premier League"])]
         league_filter = LeagueFilter(settings=league_settings)
         decision_engine = DecisionEngine()
         excel_writer = ExcelWriter(output_dir=str(tmp_path))
@@ -211,7 +211,7 @@ class TestE2EDryRun:
         nb_client = MagicMock()
         nb_client.get_matches.return_value = [match]
 
-        league_settings = [LeagueSetting(sport="football", leagues=["Premier League"])]
+        league_settings = [LeagueSetting(bet_type="1", leagues=["Premier League"])]
         league_filter = LeagueFilter(settings=league_settings)
         decision_engine = DecisionEngine()
         excel_writer = ExcelWriter(output_dir=str(tmp_path))
@@ -249,7 +249,7 @@ class TestE2EDryRun:
         nb_client.get_matches.return_value = [match]
 
         # Only allow "La Liga"
-        league_settings = [LeagueSetting(sport="football", leagues=["La Liga"])]
+        league_settings = [LeagueSetting(bet_type="1", leagues=["La Liga"])]
         league_filter = LeagueFilter(settings=league_settings)
         decision_engine = DecisionEngine()
         excel_writer = ExcelWriter(output_dir=str(tmp_path))
@@ -305,7 +305,7 @@ class TestE2EDryRun:
         nb_client = MagicMock()
         nb_client.get_matches.return_value = [match]
 
-        league_settings = [LeagueSetting(sport="football", leagues=["Premier League"])]
+        league_settings = [LeagueSetting(bet_type="1", leagues=["Premier League"])]
         league_filter = LeagueFilter(settings=league_settings)
         decision_engine = DecisionEngine()
         excel_writer = ExcelWriter(output_dir=str(tmp_path))
@@ -337,7 +337,7 @@ class TestE2EDryRun:
         nb_client = MagicMock()
         nb_client.get_matches.return_value = [match]
 
-        league_settings = [LeagueSetting(sport="football", leagues=["Premier League"])]
+        league_settings = [LeagueSetting(bet_type="1", leagues=["Premier League"])]
         league_filter = LeagueFilter(settings=league_settings)
         decision_engine = DecisionEngine()
         excel_writer = ExcelWriter(output_dir=str(tmp_path))
@@ -369,7 +369,7 @@ class TestE2EDryRun:
         nb_client = MagicMock()
         nb_client.get_matches.return_value = [match]
 
-        league_settings = [LeagueSetting(sport="football", leagues=["Premier League"])]
+        league_settings = [LeagueSetting(bet_type="1", leagues=["Premier League"])]
         league_filter = LeagueFilter(settings=league_settings)
         decision_engine = DecisionEngine()
         excel_writer = ExcelWriter(output_dir=str(tmp_path))

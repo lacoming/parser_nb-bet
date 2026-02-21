@@ -11,7 +11,7 @@ from typing import Optional
 
 from src.paths import data_path
 
-from src.decision.models import LeagueSetting
+from src.decision.models import BetDecision, LeagueSetting
 from src.nb.models import Match
 
 log = logging.getLogger("parser_nb_bet.decision.league_filter")
@@ -39,7 +39,7 @@ class LeagueFilter:
     ):
         self._settings = settings
         self._chemps = chemps_zamen or {}
-        # Build set of all allowed leagues (from all strategies)
+        # Build set of all allowed leagues (from all strategy groups)
         self._allowed_leagues: set[str] = set()
         for s in settings:
             for league in s.leagues:
@@ -55,7 +55,7 @@ class LeagueFilter:
         return result
 
     def find_setting(self, match: Match) -> Optional[LeagueSetting]:
-        """Find the strategy setting that applies to this match."""
+        """Find the strategy setting that applies to this match's league."""
         for s in self._settings:
             for league in s.leagues:
                 if league.lower() == match.league.lower():
@@ -67,6 +67,55 @@ class LeagueFilter:
                     if league.lower() == kush_league.lower():
                         return s
         return None
+
+    def find_all_settings(self, match: Match) -> list[LeagueSetting]:
+        """Find all strategy settings that apply to this match's league.
+
+        A league may appear in multiple groups with different bet types.
+        """
+        result = []
+        for s in self._settings:
+            for league in s.leagues:
+                if league.lower() == match.league.lower():
+                    result.append(s)
+                    break
+            else:
+                # Try via chemps_zamen mapping
+                kush_league = self._chemps.get(match.league)
+                if kush_league:
+                    for league in s.leagues:
+                        if league.lower() == kush_league.lower():
+                            result.append(s)
+                            break
+        return result
+
+    def get_decisions(self, match: Match) -> list[BetDecision]:
+        """Get bet decisions for a match based on its league settings.
+
+        Finds the applicable setting, checks conditions against match odds,
+        and returns a BetDecision for each matching setting.
+        """
+        settings = self.find_all_settings(match)
+        if not settings:
+            return []
+
+        decisions = []
+        kf1 = match.odds_1_end
+        kf2 = match.odds_2_end
+
+        for s in settings:
+            if s.check(kf1, kf2):
+                decisions.append(BetDecision(
+                    bet_type=s.bet_type,
+                    passes=True,
+                    reasons=[f"league condition: {s.condition_raw}"],
+                ))
+            else:
+                log.debug(
+                    "Conditions not met for %s bet=%s: kf1=%s kf2=%s cond=%s",
+                    match.match_key, s.bet_type, kf1, kf2, s.condition_raw,
+                )
+        return decisions
 
     def get_kush_league(self, nb_league: str) -> Optional[str]:
         """Get Kush league name for an NB league (via sl_chemps_zamen)."""

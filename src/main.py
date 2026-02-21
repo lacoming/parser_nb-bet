@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import sys
 
 from src.config.loader import ConfigValidationError, load_config
@@ -95,16 +96,41 @@ def main() -> None:
     from src.config.loader import load_proxies
     from src.decision.engine import DecisionEngine
     from src.decision.league_filter import LeagueFilter
-    from src.decision.league_loader import load_league_settings
+    from src.decision.league_loader import find_leagues_xlsx, load_league_settings
     from src.excel.writer import ExcelWriter
     from src.nb.client import NbClient
-    from src.scheduler.cycle_runner import run_cycle
+    from src.scheduler.cycle_runner import CycleStats, run_cycle
     from src.scheduler.msk_scheduler import MskScheduler
     from src.telegram.notifier import TelegramNotifier
 
     proxies = load_proxies(config.proxies.file) if config.proxies.enabled else []
     nb_client = NbClient(config=config.nb, proxy_list=proxies)
-    league_settings = load_league_settings(config.files.leagues_xlsx_path)
+
+    # Auto-discover leagues xlsx
+    leagues_path = config.files.leagues_xlsx_path
+    if not leagues_path or not os.path.isfile(leagues_path):
+        app_dir = (
+            os.path.dirname(sys.executable)
+            if getattr(sys, "frozen", False)
+            else os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        )
+        discovered = find_leagues_xlsx(app_dir)
+        if discovered:
+            leagues_path = discovered
+            logger.info("Using auto-discovered leagues: %s", os.path.basename(discovered))
+        else:
+            if is_gui and window is not None:
+                from tkinter import messagebox as _mb
+
+                _mb.showwarning(
+                    "Лиги не найдены",
+                    "Не найден файл .xlsx с лигами.\n"
+                    "Поместите файл с лигами рядом с программой и перезапустите.",
+                )
+            logger.warning("No leagues xlsx found — running with empty league settings")
+            leagues_path = ""
+
+    league_settings = load_league_settings(leagues_path) if leagues_path else []
     league_filter = LeagueFilter(settings=league_settings)
     decision_engine = DecisionEngine()
     excel_writer = ExcelWriter(output_dir=config.files.output_dir)
@@ -114,8 +140,8 @@ def main() -> None:
         rate_limit=config.telegram.rate_limit_seconds,
     )
 
-    def do_cycle() -> None:
-        run_cycle(
+    def do_cycle() -> CycleStats:
+        return run_cycle(
             config=config,
             state=state,
             nb_client=nb_client,
@@ -153,12 +179,24 @@ def main() -> None:
 
         cycle_count = 0
 
+        def _format_cycle_stats(stats: CycleStats) -> str:
+            return (
+                f"Матчей найдено: {stats.total_matches}\n"
+                f"После фильтра лиг: {stats.filtered}\n"
+                f"Прошли решение: {stats.decided}\n"
+                f"Найдено на Куше: {stats.matched}\n"
+                f"Ставок размещено: {stats.placed}\n"
+                f"Не найдено: {stats.missing}\n"
+                f"Ошибок: {stats.errors}"
+            )
+
         def on_start() -> None:
             nonlocal cycle_count
             # Run first cycle immediately
             logger.info("Running first cycle...")
+            stats: Optional[CycleStats] = None
             try:
-                do_cycle()
+                stats = do_cycle()
             except Exception:
                 logger.exception("First cycle failed")
             cycle_count += 1
@@ -167,6 +205,8 @@ def main() -> None:
                 placed=state.placed_count,
                 pending=state.pending_count,
             )
+            if stats is not None:
+                window.show_cycle_result(_format_cycle_stats(stats))
 
             # Then enter scheduled daemon loop
             logger.info("Entering scheduled daemon loop...")
