@@ -138,7 +138,8 @@ static class Program
         Log.Information("Kush matching: checking {Count} passing matches...", passingMatches.Count);
 
         using var kushClient = new KushClient(config.Kush, config.Proxies);
-        int matched = 0, pending = 0, skipped = 0;
+        var betPlacer = new KushBetPlacer(kushClient, config.Kush, config.Thresholds);
+        int matched = 0, pending = 0, skipped = 0, placed = 0;
 
         foreach (var (match, setting, decision) in passingMatches)
         {
@@ -160,8 +161,24 @@ static class Program
                     Log.Information("  MATCHED: {NbMatch} → {KushEvent} (confidence={Confidence:F3})",
                         match, result.KushEvent, result.Confidence);
 
-                    // TODO step 09: check ratio threshold + place bet (or dry-run)
-                    // For now, just log the match
+                    // Try placing bet for each passing bet type
+                    foreach (var bet in decision.PassingBets)
+                    {
+                        var betResult = betPlacer.PlaceAsync(
+                            match, result.KushEvent, bet, setting).GetAwaiter().GetResult();
+
+                        Log.Information("  BET: {Result}", betResult);
+
+                        if (betResult.Success || betResult.DryRun)
+                        {
+                            placed++;
+                            state.RecordBet(match.MatchKey, betResult.BetType,
+                                betResult.KushEventId, betResult.OddsNb, betResult.OddsKush,
+                                betResult.Stake, betResult.Ratio, betResult.DryRun);
+                            // TODO step 10: TelegramNotifier.NotifyPlaced()
+                            break; // One bet per match
+                        }
+                    }
                 }
                 else
                 {
@@ -195,8 +212,8 @@ static class Program
             }
         }
 
-        Log.Information("Kush matching done: {Matched} matched, {Pending} pending, {Skipped} skipped",
-            matched, pending, skipped);
+        Log.Information("Kush matching done: {Matched} matched, {Placed} placed, {Pending} pending, {Skipped} skipped",
+            matched, placed, pending, skipped);
     }
 
     static void ProcessPendingQueue(AppConfig config, StateStore state)
@@ -211,7 +228,8 @@ static class Program
         Log.Information("Pending queue: {Count} due items to re-check", duePending.Count);
 
         using var kushClient = new KushClient(config.Kush, config.Proxies);
-        int resolved = 0;
+        var betPlacer = new KushBetPlacer(kushClient, config.Kush, config.Thresholds);
+        int resolved = 0, placed = 0;
 
         foreach (var pm in duePending)
         {
@@ -237,9 +255,28 @@ static class Program
                     Log.Information("  RESOLVED: {Match} → {KushEvent} (confidence={Confidence:F3})",
                         pm.MatchKey, result.KushEvent, result.Confidence);
 
-                    // TODO step 09: check ratio + place bet
+                    // Try placing bet for each stored bet type
+                    var betTypes = pm.BetType.Split(',', StringSplitOptions.RemoveEmptyEntries);
+                    foreach (var bt in betTypes)
+                    {
+                        var fakeBet = new BetDecision { BetType = bt.Trim(), Passes = true };
+                        var betResult = betPlacer.PlaceAsync(
+                            tempMatch, result.KushEvent, fakeBet).GetAwaiter().GetResult();
+
+                        Log.Information("  BET: {Result}", betResult);
+
+                        if (betResult.Success || betResult.DryRun)
+                        {
+                            placed++;
+                            state.RecordBet(pm.MatchKey, betResult.BetType,
+                                betResult.KushEventId, betResult.OddsNb, betResult.OddsKush,
+                                betResult.Stake, betResult.Ratio, betResult.DryRun);
+                            // TODO step 10: TelegramNotifier.NotifyPlaced()
+                            break;
+                        }
+                    }
+
                     state.RemovePending(pm.MatchKey);
-                    // TODO step 10: TelegramNotifier.NotifyPlaced()
                 }
                 else
                 {
@@ -257,7 +294,8 @@ static class Program
             }
         }
 
-        Log.Information("Pending queue: {Resolved}/{Total} resolved", resolved, duePending.Count);
+        Log.Information("Pending queue: {Resolved}/{Total} resolved, {Placed} bets placed",
+            resolved, duePending.Count, placed);
     }
 
     static List<LeagueSetting> LoadLeagues(AppConfig config)

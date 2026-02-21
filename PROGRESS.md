@@ -13,7 +13,7 @@
 | 06 | Фильтр по лигам + бизнес-условия ставок | ✅ DONE | 2026-02-21 |
 | 07 | Matcher NB ↔ Kush | ✅ DONE | 2026-02-21 |
 | 08 | KushClient (поиск события) + очередь ожидания | ✅ DONE | 2026-02-21 |
-| 09 | Автоставка на Куш + dry-run | ⬜ TODO | — |
+| 09 | Автоставка на Куш + dry-run | ✅ DONE | 2026-02-21 |
 | 10 | Telegram уведомления | ⬜ TODO | — |
 | 11 | Excel вывод по шаблону | ⬜ TODO | — |
 | 12 | Планировщик + режимы запуска | ⬜ TODO | — |
@@ -271,3 +271,33 @@
 **Follow-ups:**
 - Шаг 09: KushBetPlacer — авторизация, ratio check, coupon placement, dry-run
 - Шаг 10: TelegramNotifier — уведомления missing/placed
+
+---
+
+## Шаг 09 — DONE (2026-02-21)
+**Задача:** Автоставка на Куш + dry-run.
+
+**Сделано:**
+- `Kush/BetResult.cs` — модель результата ставки: Success, DryRun, BetType, OddsNb/Kush, Ratio, Stake, Reason
+- `Kush/KushBetPlacer.cs` — полный flow размещения ставки:
+  - `CalculateRatio()` — формула: KfKush * (1 + ROI) / KfNB
+  - `GetThreshold()` — 1.10 обычные, 1.05 big leagues (case-insensitive matching)
+  - `ResolveKushBetType()` — маппинг NB bet type → Kush: 1→П1, 2→П2, X→Ничья, 1X→1X + sl_stavok.json + LeagueSetting override
+  - `PlaceAsync()` — основной метод: get odds → find matching entry → check ratio → check kf range → dry-run/real
+  - `AddCouponAsync()` — GET /coupon/add-coupon?eid=&cfid= (extract hidden form tokens)
+  - `CreateCouponAsync()` — POST /coupon/create-coupon (submit tokens + Coupon[bet_amount])
+  - `ExtractFormTokens()` — парсинг HTML формы купона (all hidden inputs)
+  - Dry-run: логирует что было бы сделано, не отправляет POST
+  - Real: LoginAsync → AddCoupon → CreateCoupon, проверка "Прогноз успешно добавлен"
+- `Program.cs` — интеграция:
+  - `RunKushMatching()`: для matched событий — PlaceAsync per passing bet, RecordBet, break after first success
+  - `ProcessPendingQueue()`: resolved pending → PlaceAsync per stored bet type, RecordBet, RemovePending
+- 22 теста KushBetPlacerTests: CalculateRatio (6), GetThreshold (4), ResolveKushBetType (5), ExtractFormTokens (4), BetResult (3)
+
+**Проверки:**
+- `dotnet build --configuration Release` ✅ (0 ошибок, 0 предупреждений)
+- `dotnet test` ✅ (123/123 passed: 101 old + 22 new)
+
+**Follow-ups:**
+- Шаг 10: TelegramNotifier (NotifyPlaced, NotifyMissing, CriticalError)
+- Шаг 11: ExcelWriter (output results per bet)
