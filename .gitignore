@@ -29,6 +29,7 @@ ENV/
 dist/
 build/
 *.spec
+!parser_nb-bet.spec
 *.spec.bak
 
 # Logs and output

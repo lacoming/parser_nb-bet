@@ -23,7 +23,7 @@ C# код остаётся в ветке `main`/`master` как бэкап.
 | 08 | Excel writer | ✅ DONE | 2026-02-21 |
 | 09 | Scheduler + режимы запуска | ✅ DONE | 2026-02-21 |
 | 10 | Tkinter UI | ✅ DONE | 2026-02-21 |
-| 11 | E2E + PyInstaller packaging | ⬜ TODO | — |
+| 11 | E2E + PyInstaller packaging | ✅ DONE | 2026-02-21 |
 
 ---
 
@@ -186,3 +186,31 @@ C# код остаётся в ветке `main`/`master` как бэкап.
 
 **Follow-ups:**
 - Step 11: E2E + PyInstaller packaging
+
+## Шаг 11 — DONE (2026-02-21)
+**Задача:** E2E + PyInstaller packaging.
+
+**Сделано:**
+- `src/paths.py` — frozen-path resolver (sys._MEIPASS для exe, project root для dev)
+- Обновлены `nb/odds_decoder.py` и `decision/league_filter.py` → используют `data_path()`
+- `tests/test_e2e.py` — 11 E2E тестов (full cycle с моками: placed, missing, filtered, NB fail, Kush fail, state tracking, equal odds skip, paths module)
+- `parser_nb-bet.spec` — PyInstaller spec с оптимизацией:
+  - Стриппинг Tcl/Tk encoding (CJK), tzdata, demos, images
+  - Исключение тяжёлых native extensions: lxml.objectify/sax/builder, rapidfuzz.distance metrics_cpp
+  - UPX compression (--lzma)
+- `scripts/build.ps1` — обновлён для использования .spec файла
+- **exe: 9.68 MB** (target < 10 MB ✅)
+- Проверено: `dist/parser_nb-bet.exe --once --dry-run` — ОК, NB-Bet API 2027 матчей, rapidfuzz работает
+- Все 288 тестов проходят
+
+**Решения:**
+- UPX обязателен для сборки < 10 MB (без UPX = ~14.8 MB)
+- lxml.objectify, lxml.sax, lxml.builder исключены (не используются)
+- rapidfuzz.distance native extensions исключены (Python fallback достаточен)
+- Tcl/Tk data: оставлены только необходимые encodings (ascii, cp1251, utf-8, etc.)
+
+**Что работает в exe:**
+- `--help` — справка
+- `--once --dry-run` — полный цикл (NB API → filter → decide)
+- rapidfuzz import — OK
+- assets/data/* — загружаются через sys._MEIPASS

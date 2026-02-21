@@ -6,9 +6,10 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 from pathlib import Path
 from typing import Optional
+
+from src.paths import data_path
 
 from src.decision.models import LeagueSetting
 from src.nb.models import Match
@@ -19,9 +20,7 @@ log = logging.getLogger("parser_nb_bet.decision.league_filter")
 def load_chemps_zamen(path: Optional[str] = None) -> dict[str, str]:
     """Load sl_chemps_zamen.json: NB league name → Kush league name mapping."""
     if path is None:
-        path = os.path.join(
-            os.path.dirname(__file__), "..", "..", "assets", "data", "sl_chemps_zamen.json"
-        )
+        path = data_path("sl_chemps_zamen.json")
     p = Path(path).resolve()
     if not p.exists():
         log.warning("sl_chemps_zamen.json not found at %s", p)

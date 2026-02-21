@@ -7,9 +7,10 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 from pathlib import Path
 from typing import Optional
+
+from src.paths import data_path
 
 log = logging.getLogger("parser_nb_bet.nb.odds_decoder")
 
@@ -28,9 +29,7 @@ _TR = {
 def load_odds_keys(path: Optional[str] = None) -> dict[int, str]:
     """Load sl_keys.json → {int_id: string_key}."""
     if path is None:
-        path = os.path.join(
-            os.path.dirname(__file__), "..", "..", "assets", "data", "sl_keys.json"
-        )
+        path = data_path("sl_keys.json")
     p = Path(path).resolve()
     if not p.exists():
         log.warning("sl_keys.json not found at %s", p)

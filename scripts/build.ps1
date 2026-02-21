@@ -11,7 +11,7 @@ $ErrorActionPreference = "Stop"
 $ProjectRoot = Split-Path $PSScriptRoot -Parent
 $DistDir = Join-Path $ProjectRoot "dist"
 $BuildDir = Join-Path $ProjectRoot "build"
-$DataDir = Join-Path $ProjectRoot "assets\data"
+$SpecFile = Join-Path $ProjectRoot "parser_nb-bet.spec"
 
 Write-Host "=== parser_nb-bet Build ===" -ForegroundColor Cyan
 Write-Host "Project root: $ProjectRoot"
@@ -35,52 +35,29 @@ Write-Host "Installing dependencies..." -ForegroundColor Yellow
 & $VenvPython -m pip install -q -r (Join-Path $ProjectRoot "requirements.txt")
 & $VenvPython -m pip install -q pyinstaller
 
-# Сборка
-$MainScript = Join-Path $ProjectRoot "src\main.py"
-$IconFile = Join-Path $ProjectRoot "assets\icon.ico"
-
+# Сборка через .spec файл (содержит все настройки оптимизации)
 $PyInstallerArgs = @(
-    "--onefile",
-    "--name", "parser_nb-bet",
     "--distpath", $DistDir,
-    "--workpath", $BuildDir,
-    "--add-data", "$DataDir;assets/data"
+    "--workpath", $BuildDir
 )
-
-# Exclude unused modules to reduce size
-$Excludes = @(
-    "matplotlib", "numpy", "scipy", "pandas", "PIL", "pillow",
-    "tkinter.test", "unittest", "email", "html.parser",
-    "pydoc", "doctest", "argparse", "difflib",
-    "setuptools", "pkg_resources", "wheel"
-)
-foreach ($exc in $Excludes) {
-    $PyInstallerArgs += "--exclude-module", $exc
-}
-
-if (Test-Path $IconFile) {
-    $PyInstallerArgs += "--icon", $IconFile
-}
 
 if (-not $NoUPX) {
-    # UPX compression (if available in PATH)
     $upx = Get-Command upx -ErrorAction SilentlyContinue
     if ($upx) {
         $PyInstallerArgs += "--upx-dir", (Split-Path $upx.Source -Parent)
         Write-Host "UPX found: $($upx.Source)" -ForegroundColor Green
     } else {
-        Write-Host "UPX not found — building without compression" -ForegroundColor Yellow
+        Write-Host "UPX not found — building without compression (exe may be >10 MB)" -ForegroundColor Yellow
     }
 }
 
 if ($Debug) {
-    $PyInstallerArgs += "--debug", "all"
     Write-Host "Building in DEBUG mode..." -ForegroundColor Yellow
 } else {
     Write-Host "Building RELEASE..." -ForegroundColor Green
 }
 
-$PyInstallerArgs += $MainScript
+$PyInstallerArgs += $SpecFile
 
 Write-Host "Running PyInstaller..." -ForegroundColor Cyan
 & $VenvPython -m PyInstaller @PyInstallerArgs
