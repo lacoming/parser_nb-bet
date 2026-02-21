@@ -2,74 +2,72 @@
 
 Windows-приложение (.exe) для автоматического парсинга ставок с nb-bet.com и синхронизации с kushvsporte.ru.
 
-## Что делает приложение
+## Возможности
 
-1. Парсит `https://nb-bet.com/Results` — текущие матчи и коэффициенты.
-2. Фильтрует матчи по лигам из `leagues.xlsx`.
-3. Применяет правила ставок (1X / 1 / 2 / X) по ТЗ.
-4. Синхронизируется с `https://kushvsporte.ru/`:
-   - если событие отсутствует → ставит в очередь ожидания + Telegram-сигнал "отсутствует на куше".
-   - если событие появилось → вычисляет порог коэффициента → проставляет ставку (или dry-run) + Telegram "проставлено".
-5. Записывает результаты в Excel `.xlsx` по шаблону заказчика.
-6. Отправляет уведомления в Telegram.
-7. Поддерживает прокси из `proxies.txt`.
+- Парсинг матчей с NB-Bet (JSON API)
+- Фильтрация по лигам из `leagues.xlsx`
+- Автоматические решения по ставкам (1X / 1 / 2 / X) по правилам ТЗ
+- Синхронизация с kushvsporte.ru (поиск событий, автоставка)
+- Уведомления в Telegram
+- Вывод результатов в Excel (.xlsx)
+- Поддержка прокси
+- Режимы: `--once` (однократно) и `--daemon` (по расписанию)
+- GUI (Tkinter) с логом и кнопками управления
 
-## Режимы запуска
+## Стек
 
-```
-parser_nb-bet.exe --once      # Один цикл и выход
-parser_nb-bet.exe --daemon    # Расписание: 08:00 МСК, каждые 4 часа, окно 14 дней
-parser_nb-bet.exe --dry-run   # Без реальных ставок (тест)
-```
+- Python 3.11+
+- requests, beautifulsoup4, lxml, rapidfuzz, openpyxl, xlsxwriter
+- tkinter (stdlib), threading + zoneinfo (stdlib)
+- PyInstaller + UPX (exe < 10 МБ)
 
-## Файлы конфигурации
+## Установка (разработка)
 
-| Файл | Описание |
-|------|----------|
-| `config.json` | Основные настройки (токен TG, расписание, пороги) |
-| `leagues.xlsx` | Список разрешённых лиг |
-| `proxies.txt` | Список прокси (опционально) |
-
-> Все файлы конфигурации **не коммитятся** в репозиторий (см. `.gitignore`).
-
-## Структура проекта
-
-```
-parser_nb-bet/
-├── src/               # Исходный код
-│   ├── config/        # Загрузка и валидация конфигурации
-│   ├── logging/       # Настройка логирования
-│   ├── state/         # Хранилище состояния (SQLite)
-│   ├── nb/            # Парсер nb-bet.com
-│   ├── kush/          # Клиент kushvsporte.ru + автоставка
-│   ├── decision/      # Движок принятия решений
-│   ├── excel/         # Запись Excel
-│   ├── telegram/      # Telegram уведомления
-│   ├── scheduler/     # Планировщик и режимы запуска
-│   └── ui/            # UI окно + трей
-├── tests/             # Unit-тесты
-├── assets/customer/   # Шаблоны заказчика
-├── scripts/           # Скрипты сборки
-├── _legacy/           # Существующий код для анализа (не смешивать)
-└── dist/              # Артефакты сборки (не коммитятся)
+```bash
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements.txt
 ```
 
-## Сборка
+## Запуск
+
+```bash
+# Однократный цикл (dry-run)
+python src/main.py --once --dry-run
+
+# Daemon режим
+python src/main.py --daemon
+
+# GUI режим (по умолчанию)
+python src/main.py
+
+# Тест Telegram
+python src/main.py --test-telegram
+```
+
+## Сборка .exe
 
 ```powershell
-# Windows
-scripts/build.ps1
+.\scripts\build.ps1
+# Результат: dist\parser_nb-bet.exe (< 10 МБ)
 ```
 
-## Требования
+## Конфигурация
 
-- Windows 10+
-- Python 3.11+ (для сборки)
-- Файлы конфигурации (`config.json`, `leagues.xlsx`)
+Скопируйте `config.example.json` → `config.json` и заполните:
+- Telegram token и chat_ids
+- Kush логин/пароль
+- Пороги ставок
 
-## UX — окно и трей
+Подробности: [CONFIG.md](CONFIG.md)
 
-- При запуске всегда открывается окно.
-- Кнопка "Скрыть окно" → уходит в трей.
-- Нажатие X → диалог: "Выйти или свернуть?".
-- Трей (правый клик): "Открыть окно" / "Выход".
+## Структура
+
+```
+src/          — исходный код
+tests/        — тесты (pytest)
+assets/data/  — справочники (sl_keys, sl_chemps_zamen, sl_stavok)
+scripts/      — скрипты сборки
+_legacy/      — legacy код (не в git)
+dist/         — собранный exe (не в git)
+```

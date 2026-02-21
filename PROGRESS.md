@@ -1,53 +1,50 @@
-# PROGRESS.md — parser_nb-bet
+# PROGRESS.md — parser_nb-bet (Python rewrite)
+
+## Контекст миграции
+
+C# .NET 8 реализация завершена (165 тестов, 13 модулей), но exe = 167 МБ.
+Условие заказа: **<10 МБ**. Решено переписать на Python → PyInstaller.
+C# код остаётся в ветке `main`/`master` как бэкап.
+
+---
 
 ## Чеклист шагов
 
 | # | Шаг | Статус | Дата |
 |---|-----|--------|------|
-| 00 | Создать/обновить CLAUDE.md | ✅ DONE | 2026-02-21 |
-| 01 | Инициализация репо и каркас проекта | ✅ DONE | 2026-02-21 |
-| 02 | Анализ существующих архивов (_legacy) | ⬜ TODO | — |
-| 03 | Выбор финального стека и план сборки | ⬜ TODO | — |
-| 04 | Конфигурация, логирование, хранение состояния | ⬜ TODO | — |
-| 05 | Парсер nb-bet Results (MVP) | ⬜ TODO | — |
-| 06 | Фильтр по лигам + бизнес-условия ставок | ⬜ TODO | — |
-| 07 | Matcher NB ↔ Kush | ⬜ TODO | — |
-| 08 | KushClient (поиск события) + очередь ожидания | ⬜ TODO | — |
-| 09 | Автоставка на Куш + dry-run | ⬜ TODO | — |
-| 10 | Telegram уведомления | ⬜ TODO | — |
-| 11 | Excel вывод по шаблону | ⬜ TODO | — |
-| 12 | Планировщик + режимы запуска | ⬜ TODO | — |
-| 13 | UI окно + трей UX | ⬜ TODO | — |
-| 14 | E2E прогон + упаковка в .exe | ⬜ TODO | — |
+| 00 | Git setup + переписать docs | ✅ DONE | 2026-02-21 |
+| 01 | Скелет + config + logging | ⬜ TODO | — |
+| 02 | NB-Bet парсер (JSON API) | ⬜ TODO | — |
+| 03 | Фильтр лиг + DecisionEngine | ⬜ TODO | — |
+| 04 | Matcher NB ↔ Kush | ⬜ TODO | — |
+| 05 | Kush client (session, events, odds) | ⬜ TODO | — |
+| 06 | Kush bet placer + dry-run | ⬜ TODO | — |
+| 07 | Telegram уведомления | ⬜ TODO | — |
+| 08 | Excel writer | ⬜ TODO | — |
+| 09 | Scheduler + режимы запуска | ⬜ TODO | — |
+| 10 | Tkinter UI | ⬜ TODO | — |
+| 11 | E2E + PyInstaller packaging | ⬜ TODO | — |
 
 ---
 
 ## Шаг 00 — DONE (2026-02-21)
-**Задача:** Создать CLAUDE.md с инструкциями для Claude Code.
+**Задача:** Git setup + переписать все docs для Python миграции.
 
 **Сделано:**
-- CLAUDE.md создан с полным описанием цели, UX, правил, структуры папок, требования к Context7.
-- PLAN.md создан с 15 промтами (шаги 00–14).
+- Создана ветка `python-rewrite` от коммита `72d032e` (первый коммит, до C#)
+- Переписаны: CLAUDE.md, PLAN.md, PROGRESS.md, ARCHITECTURE.md, CONFIG.md, README.md
+- Обновлены: requirements.txt (Python deps), .gitignore (Python + PyInstaller)
+- Скопированы data assets из master: sl_keys.json, sl_chemps_zamen.json, sl_stavok.json
+- Сохранён существующий Python skeleton (src/main.py, __init__.py файлы)
+- config.example.json обновлён (Python logging format)
+- scripts/build.ps1 переписан для PyInstaller
 
 **Решения:**
-- Секреты (TG токены, proxies) исключены из коммитов через .gitignore.
-
----
-
-## Шаг 01 — DONE (2026-02-21)
-**Задача:** Инициализация репо и каркас проекта.
-
-**Сделано:**
-- Инициализирован git-репозиторий.
-- Созданы файлы: `README.md`, `ARCHITECTURE.md`, `PROGRESS.md`, `CONFIG.md`.
-- Структура папок: `src/{config,logging,state,nb,kush,decision,excel,telegram,scheduler,ui}`, `tests/`, `assets/customer/`, `scripts/`, `_legacy/`, `dist/`.
-- `.gitignore` актуализирован.
-- Выбран стек: Python 3.11 + tkinter + pystray + httpx + BS4 + openpyxl + APScheduler + PyInstaller.
-
-**Context7:** Недоступен в среде выполнения — стек выбран на основе официальной документации и практики (зафиксировано).
-
-**Стек обоснован в `ARCHITECTURE.md`.**
+- Без SQLite (in-memory state)
+- Без pystray/Pillow (tkinter only, tray опционально)
+- Без APScheduler (threading + zoneinfo)
+- Без tenacity (manual retry)
+- rapidfuzz вместо FuzzySharp
 
 **Follow-ups:**
-- Шаг 02: распаковать и проанализировать _legacy-архивы (nb3.zip, kushvsporte_autostavka.zip).
-- После анализа legacy — возможна корректировка стека (зафиксировать в шаге 03).
+- Step 01: config loader, logging setup, state module

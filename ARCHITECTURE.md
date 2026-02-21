@@ -1,155 +1,179 @@
-# ARCHITECTURE.md — parser_nb-bet
+# ARCHITECTURE.md — parser_nb-bet (Python)
 
 ## Выбранный стек
 
-> Context7 MCP недоступен в текущей среде — стек выбран на основе официальной документации и практики.
-> Зафиксировано в PROGRESS.md (шаг 01).
+> Стек: Python 3.11+ / PyInstaller. Цель: exe < 10 МБ.
+> Миграция с C# .NET 8 (exe = 167 МБ → не проходит ограничение <10 МБ).
 
 | Компонент | Технология | Обоснование |
 |-----------|-----------|-------------|
-| Язык | **Python 3.11** | Лучшая экосистема для парсинга/Excel/Telegram, хорошая поддержка PyInstaller |
-| UI окно | **tkinter** (stdlib) | Встроен в Python, нет зависимостей, достаточно для статусного окна |
-| Трей | **pystray** | Минимальная библиотека, Windows-native трей, PIL/Pillow для иконки |
-| HTTP | **httpx** | Async-capable, нативная поддержка прокси, retries через tenacity |
-| Парсинг HTML | **BeautifulSoup4** + **lxml** | Стандарт, быстрый парсер |
-| Динамические страницы | **playwright** (только если нужно, по факту анализа) | Резерв |
-| Excel | **openpyxl** | Нативная работа с .xlsx, шаблоны, mapping-слой |
-| Telegram | **httpx** (Bot API напрямую) | Без тяжёлых фреймворков, rate-limit своими руками |
-| Состояние | **SQLite** (stdlib sqlite3) | Надёжно, нет лишних зависимостей |
-| Планировщик | **APScheduler** | Поддержка timezone (MSK/pytz), cron-style и interval |
-| Сборка .exe | **PyInstaller** | Де-факто стандарт для Python→.exe, хорошая поддержка Windows |
-| Retries/backoff | **tenacity** | Простая декораторная схема |
-| Timezone | **pytz** | MSK (Europe/Moscow) |
+| Язык | **Python 3.11+** | Лёгкий exe через PyInstaller, быстрая разработка |
+| HTTP | **requests** | Session-based, proxy, retry, широко используется |
+| Парсинг HTML | **beautifulsoup4 + lxml** | Стандарт для Python, быстрый |
+| Fuzzy matching | **rapidfuzz** | WRatio — аналог legacy Python кода |
+| Excel read | **openpyxl** | Чтение leagues.xlsx |
+| Excel write | **xlsxwriter** | Лёгкий, только запись |
+| GUI | **tkinter** (stdlib) | Встроен в Python, нет доп. зависимостей |
+| Telegram | **requests** (Bot API) | Прямые HTTP-вызовы, без SDK |
+| Состояние | **In-memory** (dict/set) | Нет SQLite, минимальный footprint |
+| Планировщик | **threading + zoneinfo** (stdlib) | MSK = Europe/Moscow |
+| Логирование | **logging + RotatingFileHandler** (stdlib) | Встроено |
+| Retry | **Manual** (loop + time.sleep) | Без tenacity |
+| Packaging | **PyInstaller + UPX** | --onefile, exe < 10 МБ |
+
+---
+
+## Структура проекта
+
+```
+parser_nb-bet/
+├── src/
+│   ├── main.py              # Entry point (argparse)
+│   ├── __init__.py
+│   ├── config/
+│   │   ├── loader.py        # JSON config loader + validation
+│   │   └── schema.py        # Dataclass config models
+│   ├── log_setup.py         # logging + RotatingFileHandler
+│   ├── state.py             # In-memory state (dicts/sets)
+│   ├── nb/
+│   │   ├── client.py        # NB-Bet JSON API parser
+│   │   ├── models.py        # Match dataclass
+│   │   └── odds_decoder.py  # sl_keys.json decoder
+│   ├── kush/
+│   │   ├── session.py       # requests.Session + CSRF
+│   │   ├── client.py        # KushClient (events, odds)
+│   │   ├── matcher.py       # EventMatcher (rapidfuzz)
+│   │   ├── normalizer.py    # Team name normalization
+│   │   ├── bet_placer.py    # Ratio check + bet placement
+│   │   ├── bet_result.py    # BetResult dataclass
+│   │   └── models.py        # KushEvent, MatchResult
+│   ├── decision/
+│   │   ├── engine.py        # Decision rules from spec
+│   │   ├── league_loader.py # openpyxl leagues.xlsx
+│   │   ├── league_filter.py # Filter + sl_chemps_zamen
+│   │   └── models.py        # LeagueSetting, BetDecision
+│   ├── telegram/
+│   │   └── notifier.py      # Bot API notifications
+│   ├── excel/
+│   │   ├── writer.py        # xlsxwriter output
+│   │   ├── default_mapper.py
+│   │   └── models.py        # ExcelRow
+│   ├── scheduler/
+│   │   ├── msk_scheduler.py # MSK timezone scheduler
+│   │   └── cycle_runner.py  # Full cycle orchestration
+│   └── ui/
+│       └── main_window.py   # Tkinter window
+├── tests/                   # pytest tests
+├── assets/data/             # sl_keys.json, sl_chemps_zamen.json, sl_stavok.json
+├── scripts/build.ps1        # PyInstaller build
+├── config.example.json
+├── requirements.txt
+└── dist/                    # PyInstaller output
+```
 
 ---
 
 ## Компоненты системы
 
-### ParserNB
-- **Назначение:** Получить список текущих матчей с `nb-bet.com/Results`.
-- **Вход:** config (proxy, timeouts, retries).
-- **Выход:** `list[Match]` — нормализованный список матчей.
-- **Детали:** Анализируем HTML/API (шаг 05). Если сайт использует JS-рендеринг — подключаем playwright.
-- **Файлы:** `src/nb/`
+### NbClient (`nb/`)
+- **Назначение:** Получить список текущих матчей с `nb-bet.com` (JSON API).
+- **API:** `GET https://app.nb-bet.com/v1/{soccer|hockey}/math-analysis/page?timestamp={unix_ms}`
+- **Выход:** `list[Match]`
+- **Headers:** Origin=nb-bet.com, Referer=nb-bet.com/
+- **JSON:** response.data.leagues[].4[] = matches
 
-### LeagueFilter
-- **Назначение:** Отфильтровать матчи по списку лиг из `leagues.xlsx`.
-- **Вход:** `list[Match]`, путь к `leagues.xlsx`.
-- **Выход:** `list[Match]` — только совпавшие лиги.
-- **Файлы:** `src/decision/league_filter.py`
+### LeagueFilter (`decision/`)
+- **Назначение:** Фильтрация по лигам из `leagues.xlsx`.
+- **Маппинг:** sl_chemps_zamen.json (NB → Kush нормализация имён лиг).
 
-### DecisionEngine
-- **Назначение:** Применить правила ставок по ТЗ.
-- **Вход:** `Match` (odds1, oddsX, odds2).
-- **Выход:** `Decision(bet_type, passes, reasons[])`.
+### DecisionEngine (`decision/`)
+- **Назначение:** Правила ставок по ТЗ.
 - **Правила:**
-  - Если kf1 > kf2 → ветка "1X / 1"
-  - Если kf2 > kf1 → ветка "2 / X"
-  - Точные пороги — из ТЗ, зафиксируем в шаге 06.
-- **Файлы:** `src/decision/engine.py`
+  - kf1 > kf2: 1X(kf1≤8, kf1X≥1.5, kf2≥1.4), 1(kf1≤8, kf2≥1.4), 2(kf2≥1.5), X(same as 1X)
+  - kf2 > kf1: 2(kf2≤8, kf1≥1.4), 1(kf1≥1.5)
+  - kf1 == kf2: skip
 
-### Matcher (NB ↔ Kush)
-- **Назначение:** Сопоставить матч NB с событием на Куше.
+### EventMatcher (`kush/matcher.py`)
 - **Алгоритм:**
-  - Нормализация команд: casefold, удаление пунктуации, транслитерация.
-  - Допуск по времени: ±2 часа (настраивается).
-  - Confidence score (fuzzy match по названиям команд).
-- **Порог доверия:** < 0.80 → не ставим, только лог.
-- **Файлы:** `src/kush/matcher.py`
+  1. Нормализация: lower → transliterate ru→en → remove punctuation → collapse whitespace
+  2. Fuzzy: rapidfuzz `WRatio` на нормализованных строках, проверяет оба порядка команд
+  3. TimeScore: линейный decay от 1.0 до 0.0 на границе tolerance
+  4. Confidence = nameScore * 0.70 + timeScore * 0.30
+  5. Порог: ≥ 0.80 → принят
 
-### KushClient
-- **Назначение:** Получить список событий с `kushvsporte.ru`.
-- **Методы:**
-  - `get_events()` → `list[KushEvent]`
-  - `find_event(nb_match)` → `KushEvent | None`
-- **Файлы:** `src/kush/client.py`
+### KushClient (`kush/`)
+- **Session:** requests.Session + CSRF из `<meta name="csrf-token">` + cookies
+- **Login:** POST /users/login (form + _csrf)
+- **Events:** POST /bet/event-list по CID лиги
+- **Odds:** POST /bet/cf-list по event ID
+- **Rate-limiting:** 1.8 сек между запросами
 
-### KushBetPlacer
-- **Назначение:** Проставить ставку на Куше.
+### KushBetPlacer (`kush/bet_placer.py`)
 - **Формула:** `KfKush * (1 + ROI) / KfNB > threshold`
   - threshold: 1.10 (обычные), 1.05 (big leagues)
-- **Dry-run:** не делает реальных запросов, только логирует.
-- **Файлы:** `src/kush/bet_placer.py`
+- **Bet flow:** get odds → find entry → check ratio → dry-run/real
+- **Real:** login → add_coupon → create_coupon
 
-### PendingQueue (State)
-- **Назначение:** Очередь матчей, ожидающих появления на Куше.
-- **Реализация:** SQLite таблица `pending_matches`.
-- **Дедупликация:** по `match_key` (league + teams + date).
-- **Файлы:** `src/state/`
+### TelegramNotifier (`telegram/`)
+- **Events:** placed, missing, critical, cycle_summary, test
+- **MarkdownV2 + fallback** to plain text
+- **Rate-limit:** configurable delay between messages
 
-### ExcelWriter
-- **Назначение:** Записать результаты в `.xlsx` по шаблону заказчика.
-- **Mapping-слой:** легко подменить колонки без изменения логики.
-- **Выходные файлы:** `output/<date>_results.xlsx`.
-- **Файлы:** `src/excel/`
+### ExcelWriter (`excel/`)
+- **xlsxwriter:** 24 колонки, файл по дате
+- **Mapping pattern** для подмены колонок
 
-### TelegramNotifier
-- **Назначение:** Отправить уведомления в Telegram.
-- **События:**
-  - Match найден и проходит фильтры.
-  - Отсутствует на Куше.
-  - Ставка проставлена.
-  - Критическая ошибка.
-- **Файлы:** `src/telegram/`
+### MskScheduler (`scheduler/`)
+- **Режимы:** --once, --daemon
+- **MSK:** zoneinfo("Europe/Moscow")
+- **Slots:** start_time + interval, graceful shutdown via threading.Event
 
-### Scheduler
-- **Назначение:** Запускать цикл по расписанию.
-- **Режимы:**
-  - `--once`: один цикл и выход.
-  - `--daemon`: 08:00 МСК, каждые 4 часа, окно 14 дней.
-- **Graceful shutdown:** Ctrl+C, сигнал из UI.
-- **Файлы:** `src/scheduler/`
-
-### UI + Tray
-- **Назначение:** Окно статуса + трей.
-- **UX:**
-  - Старт → окно открыто.
-  - Кнопка "Скрыть" → трей.
-  - X → диалог "Выйти/Свернуть".
-  - Трей правый клик: "Открыть окно", "Выход".
-- **Статус в окне:** last run, next run, total matches, placed bets.
-- **Файлы:** `src/ui/`
+### UI (`ui/main_window.py`)
+- **Tkinter:** status panel, log viewer (Text widget), buttons
+- **UX:** Start visible, X → "Выйти/Свернуть?" dialog
+- **Thread-safe:** root.after() for log updates
 
 ---
 
-## Модель данных
+## Модели данных
 
-### Match
 ```python
 @dataclass
 class Match:
-    match_key: str           # Стабильный ключ (league + teams + date)
+    match_key: str      # "{league}|{home}|{away}|{date:%Y%m%d}"
     league: str
     team_home: str
     team_away: str
-    start_time: datetime     # UTC
-    nb_url: str
-    odds1: float | None
-    oddsX: float | None
-    odds2: float | None
-    odds1X: float | None     # Вычисляется: min(odds1, oddsX)
-```
+    start_time_utc: datetime
+    nb_slug: str
+    sport: str
+    odds_1_start: float | None
+    odds_x_start: float | None
+    odds_2_start: float | None
+    odds_1_end: float | None
+    odds_x_end: float | None
+    odds_2_end: float | None
 
-### Decision
-```python
+    @property
+    def odds_1x_end(self) -> float | None:
+        if self.odds_1_end and self.odds_x_end:
+            return min(self.odds_1_end, self.odds_x_end)
+        return None
+
 @dataclass
-class Decision:
-    match_key: str
-    bet_type: str            # "1X" | "1" | "2" | "X" | "skip"
+class BetDecision:
+    bet_type: str       # "1X" | "1" | "2" | "X" | "skip"
     passes: bool
     reasons: list[str]
-```
 
-### KushEvent
-```python
 @dataclass
 class KushEvent:
-    kush_id: str
+    event_id: str
     league: str
     team_home: str
     team_away: str
-    start_time: datetime
-    odds: dict[str, float]   # {"1": 1.85, "X": 3.5, "2": 2.1}
+    start_time_utc: datetime
+    odds: dict[str, float]
     url: str
 ```
 
@@ -158,39 +182,41 @@ class KushEvent:
 ## Поток данных (один цикл)
 
 ```
-ParserNB.get_matches()
+NbClient.get_matches()
     → LeagueFilter.filter()
         → DecisionEngine.decide()
-            → [for each passing match]
+            → foreach passing match:
                 → KushClient.find_event()
-                    → [found] → BetPlacer.place() (если ratio OK)
-                              → TelegramNotifier.notify("placed")
-                              → ExcelWriter.write_row()
-                    → [not found] → PendingQueue.enqueue()
-                                  → TelegramNotifier.notify("missing")
+                    → found  → BetPlacer.place() (если ratio OK)
+                              → TelegramNotifier.notify_placed()
+                              → ExcelWriter.add_row()
+                    → None   → State.enqueue_pending()
+                              → TelegramNotifier.notify_missing()
     → ExcelWriter.save()
     → Scheduler.schedule_next()
 ```
 
 ---
 
-## Matching NB ↔ Kush — правила
+## NB-Bet API (из legacy)
 
-1. Нормализация команды: `lower() → strip punctuation → translit (рус→лат при необходимости)`.
-2. Fuzzy match по двум командам (home + away).
-3. Проверка времени: `|nb_start - kush_start| ≤ 2h`.
-4. Confidence = `(name_score * 0.7) + (time_score * 0.3)`.
-5. Порог: ≥ 0.80 → матч принят.
-6. Если confidence < 0.80 → не ставим, только лог (никогда не ставить при низком доверии).
+- Endpoint: `GET https://app.nb-bet.com/v1/{soccer|hockey}/math-analysis/page?timestamp={unix_ms}`
+- No auth required, JSON response
+- Headers: Origin=nb-bet.com, Referer=nb-bet.com/
+- JSON structure: response.data.leagues[].4[] = matches
+- Match fields: '3'=slug, '4'=timestamp(ms), '5'=end_odds, '6'=start_odds, '7'=home, '15'=away
 
----
+## Kushvsporte.ru flow (из legacy)
 
-## Решения и ограничения
+- CSRF chain: GET page → extract meta csrf-token + PHPSESSID + _csrf cookies
+- Leagues: GET /centerbet/football?day={0|1}
+- Matches: POST /bet/event-list {cid, day}
+- Odds: POST /bet/cf-list {eid}
+- Auth: POST /users/login (login-form[login], login-form[password], _csrf)
+- Bet: GET /coupon/add-coupon?eid=&cfid= → POST /coupon/create-coupon (tokens + bet_amount)
 
-| Решение | Обоснование |
-|---------|-------------|
-| tkinter + pystray (не Electron) | Малый размер .exe, нет Node.js |
-| SQLite (не Redis/файл) | Встроен в Python, надёжен, транзакции |
-| httpx вместо aiohttp | Синхронный режим проще для одного потока + async резерв |
-| APScheduler вместо cron | Работает внутри процесса, Windows-совместим |
-| PyInstaller --onefile | Единый .exe, проще для заказчика |
+## Data assets (в assets/data/)
+
+- sl_keys.json — odds key ID → string key mapping (1000+ entries)
+- sl_chemps_zamen.json — NB league name → Kush league name mapping (248+ entries)
+- sl_stavok.json — NB bet type → [Kush direct, Kush inverse] mapping

@@ -16,9 +16,6 @@ __pycache__/
 .Python
 *.egg
 *.egg-info/
-dist/
-build/
-.eggs/
 pip-wheel-metadata/
 *.whl
 
@@ -31,13 +28,13 @@ ENV/
 # PyInstaller build artifacts
 dist/
 build/
+*.spec
 *.spec.bak
 
 # Logs and output
 logs/
 *.log
 output/
-*.xlsx
 !config.example.json
 
 # IDE
@@ -56,3 +53,11 @@ Desktop.ini
 .coverage
 htmlcov/
 .tox/
+
+# C# leftovers (not used in Python branch)
+bin/
+obj/
+*.sln
+*.csproj
+*.user
+.vs/

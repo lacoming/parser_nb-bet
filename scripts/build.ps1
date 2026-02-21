@@ -1,15 +1,17 @@
-# scripts/build.ps1 — сборка parser_nb-bet в .exe
-# Использование: .\scripts\build.ps1 [-Debug] [-Clean]
+# scripts/build.ps1 — сборка parser_nb-bet в .exe (PyInstaller + UPX)
+# Использование: .\scripts\build.ps1 [-Debug] [-Clean] [-NoUPX]
 
 param(
     [switch]$Debug,
-    [switch]$Clean
+    [switch]$Clean,
+    [switch]$NoUPX
 )
 
 $ErrorActionPreference = "Stop"
 $ProjectRoot = Split-Path $PSScriptRoot -Parent
 $DistDir = Join-Path $ProjectRoot "dist"
 $BuildDir = Join-Path $ProjectRoot "build"
+$DataDir = Join-Path $ProjectRoot "assets\data"
 
 Write-Host "=== parser_nb-bet Build ===" -ForegroundColor Cyan
 Write-Host "Project root: $ProjectRoot"
@@ -21,7 +23,7 @@ if ($Clean) {
     if (Test-Path $BuildDir) { Remove-Item $BuildDir -Recurse -Force }
 }
 
-# Проверка venv
+# Проверка Python
 $VenvPython = Join-Path $ProjectRoot ".venv\Scripts\python.exe"
 if (-not (Test-Path $VenvPython)) {
     Write-Host "Creating virtual environment..." -ForegroundColor Yellow
@@ -39,14 +41,36 @@ $IconFile = Join-Path $ProjectRoot "assets\icon.ico"
 
 $PyInstallerArgs = @(
     "--onefile",
-    "--windowed",
     "--name", "parser_nb-bet",
     "--distpath", $DistDir,
-    "--workpath", $BuildDir
+    "--workpath", $BuildDir,
+    "--add-data", "$DataDir;assets/data"
 )
+
+# Exclude unused modules to reduce size
+$Excludes = @(
+    "matplotlib", "numpy", "scipy", "pandas", "PIL", "pillow",
+    "tkinter.test", "unittest", "email", "html.parser",
+    "pydoc", "doctest", "argparse", "difflib",
+    "setuptools", "pkg_resources", "wheel"
+)
+foreach ($exc in $Excludes) {
+    $PyInstallerArgs += "--exclude-module", $exc
+}
 
 if (Test-Path $IconFile) {
     $PyInstallerArgs += "--icon", $IconFile
+}
+
+if (-not $NoUPX) {
+    # UPX compression (if available in PATH)
+    $upx = Get-Command upx -ErrorAction SilentlyContinue
+    if ($upx) {
+        $PyInstallerArgs += "--upx-dir", (Split-Path $upx.Source -Parent)
+        Write-Host "UPX found: $($upx.Source)" -ForegroundColor Green
+    } else {
+        Write-Host "UPX not found — building without compression" -ForegroundColor Yellow
+    }
 }
 
 if ($Debug) {
@@ -65,7 +89,12 @@ if ($LASTEXITCODE -eq 0) {
     $ExePath = Join-Path $DistDir "parser_nb-bet.exe"
     if (Test-Path $ExePath) {
         $Size = [math]::Round((Get-Item $ExePath).Length / 1MB, 2)
-        Write-Host "SUCCESS: $ExePath ($Size MB)" -ForegroundColor Green
+        Write-Host ""
+        Write-Host "SUCCESS: $ExePath" -ForegroundColor Green
+        Write-Host "Size: $Size MB" -ForegroundColor $(if ($Size -lt 10) { "Green" } else { "Red" })
+        if ($Size -ge 10) {
+            Write-Host "WARNING: exe exceeds 10 MB target!" -ForegroundColor Red
+        }
     }
 } else {
     Write-Host "BUILD FAILED (exit code: $LASTEXITCODE)" -ForegroundColor Red

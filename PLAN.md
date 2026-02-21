@@ -1,386 +1,166 @@
-# PLAN.md — parser_nb-bet (Claude Opus 4.6 / Claude Code)
+# PLAN.md — parser_nb-bet (Python rewrite)
 
-> **Правило:** 1 шаг = 1 промт для Claude Opus 4.6.  
-> Каждый шаг самодостаточный: содержит цель, требования, критерии готовности, проверки.  
-> В конце каждого шага: обновить `PROGRESS.md`, показать проверки, сделать коммит (если не сказано иначе).
-
-## Контекст проекта (кратко)
-Windows-приложение (.exe), которое:
-- парсит `https://nb-bet.com/Results` (текущие матчи),
-- фильтрует по лигам из `leagues.xlsx`,
-- применяет правила ставок (1X / 1 / 2 / X) по ТЗ,
-- синхронизируется с `https://kushvsporte.ru/` (матчинг событий, очередь ожидания, автоставка),
-- пишет Excel `.xlsx` по шаблону заказчика,
-- отправляет сигналы в Telegram,
-- поддерживает прокси (`proxies.txt`),
-- умеет `--once` и `--daemon` (08:00 МСК, каждые 4 часа, окно 14 дней),
-- UI: окно при старте, кнопка “Скрыть окно” -> трей; при X диалог “Выйти/Свернуть”; в трее меню “Открыть окно/Выход”.
+> **Правило:** 1 шаг = 1 промт для **Claude Opus 4.6**.
+> Каждый шаг самодостаточный: цель → требования → критерии готовности → проверки.
+> В конце каждого шага: обновить `PROGRESS.md`, показать проверки, сделать коммит.
+>
+> **ВАЖНО:** ты вставляешь шаги через `/clear`, поэтому каждый промт должен начинаться с чтения `CLAUDE.md`, `PLAN.md`, `PROGRESS.md`, `ARCHITECTURE.md`, `CONFIG.md`.
 
 ---
 
-## PROMPT 00 — Создать/обновить CLAUDE.md (обязательные правила проекта)
-```text
-Ты Claude Opus 4.6. Мы в корне репозитория: parser_nb-bet.
+## Контекст
 
-ЗАДАЧА: создать файл CLAUDE.md с инструкциями для Claude Code, чтобы все дальнейшие шаги выполнялись одинаково.
-ТРЕБОВАНИЯ:
-- Включи описание цели проекта и финального UX (окно/трей/диалог закрытия).
-- Зафиксируй правило: в конце каждого шага обновлять PROGRESS.md, показывать проверки и коммитить.
-- Секреты (TG токены/логины) нельзя коммитить.
-- Структура папок src/, tests/, scripts/, _legacy/.
-- ОБЯЗАТЕЛЬНО: использовать Context7 (MCP) для изучения документации выбранного стека (resolve-library-id -> query-docs) перед реализацией ключевых интеграций (tray/ui, упаковка exe, excel, telegram, scheduler/timezone, http client).
-- Если Context7 недоступен — использовать официальные доки и отметить это в PROGRESS.md.
-
-СДЕЛАЙ:
-1) Создай/обнови CLAUDE.md под наш проект.
-2) Добавь .gitignore (dist/, .venv/, config.json, proxies.txt, *.log, output/ и т.п.).
-3) Покажи git diff + git status.
-
-КРИТЕРИИ:
-- CLAUDE.md существует и отражает все требования выше.
-- .gitignore защищает секреты и артефакты.
-- PROGRESS.md: шаг 0 DONE (если PROGRESS.md еще нет — создай его с минимальной структурой).
-
-ПОСЛЕ: коммит: "chore: add project instructions (CLAUDE.md)".
-```
+C# .NET 8 реализация завершена (165 тестов, 13 модулей), но exe = 167 МБ.
+Условие заказа: **<10 МБ**, стек: **Python → PyInstaller**.
+Legacy Python-код имеет рабочий `nbbet.exe` = 9.0 МБ. Решено откатиться на Python.
 
 ---
 
-## PROMPT 01 — Инициализация репо и каркас проекта
-```text
-Ты Claude Opus 4.6 в режиме техлида. Мы в корне репозитория: parser_nb-bet.
+## Стек Python
 
-ЗАДАЧА: создать каркас проекта и документацию, чтобы дальше идти по шагам.
-ТРЕБОВАНИЯ:
-- Windows .exe (легковесно)
-- UI окно + скрытие в трей + диалог при закрытии (Выйти/Свернуть)
-- парсинг nb-bet.com/Results, синхронизация kushvsporte.ru, Excel, Telegram, прокси, расписание 4 часа с 08:00 МСК, окно 14 дней.
+| Компонент | Библиотека | Размер (в exe) |
+|-----------|-----------|----------------|
+| HTTP | requests | ~1 МБ |
+| HTML | beautifulsoup4 + lxml | ~1.5 МБ |
+| Fuzzy match | rapidfuzz | ~1 МБ |
+| Excel read | openpyxl | ~0.4 МБ |
+| Excel write | xlsxwriter | ~0.4 МБ |
+| GUI | tkinter (stdlib) | ~0.5 МБ |
+| Scheduler | threading + zoneinfo (stdlib) | 0 |
+| Logging | logging + RotatingFileHandler (stdlib) | 0 |
+| Telegram | requests (Bot API) | 0 (shared) |
+| Python runtime | embedded (UPX compressed) | ~4 МБ |
+| **Итого** | | **~8-9 МБ** |
 
-СДЕЛАЙ:
-1) /init (если доступно) и создай файлы: README.md, ARCHITECTURE.md, PROGRESS.md, CONFIG.md.
-2) Предложи минимальный стек и обоснуй в ARCHITECTURE.md: язык/библиотеки под Windows tray + web parsing + excel + telegram.
-3) Создай структуру папок src/ (или аналог), tests/, assets/, scripts/.
-4) Добавь в PROGRESS.md чеклист шагов (черновой), но без реализации.
-
-КРИТЕРИИ ГОТОВНОСТИ:
-- repo чистый, есть структура и 4 md файла.
-- ARCHITECTURE.md описывает компоненты: ParserNB, Matcher, KushClient/Autostavka, ExcelWriter, TelegramNotifier, Scheduler, UI(Tray).
-- PROGRESS.md содержит шаг 1 DONE.
-
-ПОСЛЕ: покажи git status и краткий diff-обзор. Коммит: "chore: bootstrap repo structure".
-```
+Без SQLite, без pystray/Pillow, без APScheduler, без tenacity.
 
 ---
 
-## PROMPT 02 — Анализ существующих архивов и переиспользование
-```text
-Мы в parser_nb-bet. В /mnt/data лежат:
-- /mnt/data/nb3.zip
-- /mnt/data/kushvsporte_autostavka.zip
-- /mnt/data/ТЗ 2 бота - 1ХХХ.docx
+## STEP 00 — Git setup + переписать все docs
 
-ЗАДАЧА: распаковать, проанализировать, составить документ "EXISTING_CODE_REVIEW.md".
-НУЖНО:
-1) Распакуй оба zip внутрь repo в папку _legacy/ (не смешивать с новым кодом).
-2) Определи стек/язык/зависимости, как реализованы:
-   - парсинг nb-bet (особенно подписочные архивы, если есть)
-   - отправка в Telegram (токен/чат где хранится)
-   - автоставка на kushvsporte (механика логина/ставки/поиск матча)
-   - прокси, ретраи, логирование
-3) Составь план: что можно переиспользовать 1:1, что вынести как модуль, что переписать.
-4) Сконвертируй ключевые требования из docx в bullets в конце файла.
-
-КРИТЕРИИ:
-- есть _legacy/ с исходниками
-- есть EXISTING_CODE_REVIEW.md с выводами + рекомендацией по стеку
-- PROGRESS.md: шаг 2 DONE
-
-ПОСЛЕ:
-- git status
-- Добавь разумный .gitignore если нужно
-- Коммить документацию/скелет. Legacy можно оставить некоммиченным, если много/мусорно (зафиксируй решение в PROGRESS.md).
-```
+- Создать ветку `python-rewrite` от `72d032e`
+- Переписать: CLAUDE.md, PLAN.md, PROGRESS.md, ARCHITECTURE.md, CONFIG.md
+- Обновить: requirements.txt, .gitignore, config.example.json
+- Сохранить: `_legacy/`, `assets/data/`
+- Коммит: `docs: rewrite project docs for Python migration`
 
 ---
 
-## PROMPT 03 — Выбор финального стека и план сборки “малый вес”
-```text
-На основе ARCHITECTURE.md и EXISTING_CODE_REVIEW.md выбери финальный стек, ориентир: минимальный вес exe и минимальная боль поддержки.
+## STEP 01 — Скелет + config + logging
 
-ЗАДАЧА:
-1) Зафиксируй в ARCHITECTURE.md финальный стек.
-2) Опиши стратегию сборки в CONFIG.md:
-   - как билдим exe
-   - где лежат config.json, proxies.txt, leagues.xlsx
-   - где лежат логи и excel отчеты
-3) Создай Makefile/justfile или scripts/build.ps1 для сборки.
-4) Добавь .editorconfig + базовый линтер/форматтер.
-
-КРИТЕРИИ:
-- можно выполнить команду сборки (пока пусть делает stub/build debug)
-- все описано документально
-- PROGRESS.md: шаг 3 DONE
-
-ПОСЛЕ: проверки (lint/test/build), git status, коммит: "chore: finalize stack and build scripts".
-```
+- `src/main.py` — argparse: `--once`, `--daemon`, `--dry-run`, `--test-telegram`
+- `src/config/loader.py` — загрузка config.json, валидация, defaults, env overrides
+- `src/config/schema.py` — dataclass-модели конфигурации
+- `src/log_setup.py` — logging + RotatingFileHandler + console
+- `src/state.py` — in-memory state (dict/set): pending, placed, known_keys
+- Тесты: test_config.py (8-10 тестов)
+- Коммит: `feat: project skeleton, config, logging (step 01)`
 
 ---
 
-## PROMPT 04 — Конфигурация, логирование, хранение состояния
-```text
-ЗАДАЧА: реализовать базовые модули конфигурации и состояния, без бизнес-логики.
+## STEP 02 — NB-Bet парсер (JSON API)
 
-НУЖНО:
-1) config.json schema (пример) со всеми ключами:
-   schedule (start_time_msk, interval_hours, window_days),
-   telegram (token/chat_ids),
-   proxies (enabled, file),
-   thresholds (roi, default_ratio, big_league_ratio),
-   files (leagues_xlsx_path, output_dir, logs_dir),
-   ui (tray_enabled).
-2) Загрузчик конфигурации с валидацией + дефолтами.
-3) Логирование (ротация, уровни, файл + консоль/в UI позже).
-4) Хранилище состояния (sqlite или json): очередь матчей "ожидает куш", дедуп по match_key.
-
-КРИТЕРИИ:
-- есть src/config/*, src/logging/*, src/state/*
-- unit-тесты для загрузки конфигурации/валидации
-- PROGRESS.md: шаг 4 DONE
-- команда запуска пишет лог “boot ok” и завершается.
-
-ПОСЛЕ: проверки + коммит: "feat: config logging and state".
-```
+- `src/nb/client.py` — NbClient: get_matches(), parse JSON, retry, proxy
+- `src/nb/models.py` — Match dataclass
+- `src/nb/odds_decoder.py` — декодер ключей из sl_keys.json
+- Тесты: test_nb_client.py (12-15 тестов)
+- Коммит: `feat: NB-Bet JSON API parser (step 02)`
 
 ---
 
-## PROMPT 05 — Парсер nb-bet Results (MVP)
-```text
-ЗАДАЧА: сделать ParserNB для https://nb-bet.com/Results.
+## STEP 03 — Фильтр лиг + DecisionEngine
 
-ТРЕБОВАНИЯ:
-- использовать прокси при включении (proxies.txt)
-- таймауты/ретраи
-- распарсить список текущих матчей + ключевые поля (минимум: лига, команды, дата/время, коэффициенты 1/X/2 если есть, ссылка/идентификатор)
-
-СДЕЛАЙ:
-1) Исследуй HTML/запросы: возможно это API. Если есть API — используй его.
-2) Реализуй нормализованную модель Match (+ match_key).
-3) Добавь CLI команду: `parser_nb-bet.exe --once --source nb` (или аналог) печатает количество матчей и 3 примера в лог.
-
-КРИТЕРИИ:
-- стабильный сбор данных
-- ошибки не валят процесс
-- PROGRESS.md: шаг 5 DONE
-
-ПОСЛЕ: проверки + коммит: "feat: nb results parser mvp".
-```
+- `src/decision/league_loader.py` — чтение leagues.xlsx (openpyxl)
+- `src/decision/league_filter.py` — фильтр + sl_chemps_zamen.json
+- `src/decision/engine.py` — правила ставок из ТЗ
+- Тесты: test_decision.py (17+), test_league_filter.py (6+)
+- Коммит: `feat: league filter + decision engine (step 03)`
 
 ---
 
-## PROMPT 06 — Фильтр по лигам (leagues.xlsx) + бизнес-условия ставок
-```text
-ЗАДАЧА: реализовать фильтрацию по leagues.xlsx и расчёт условий ставок (1X/1/2/X) по ТЗ.
+## STEP 04 — Matcher NB ↔ Kush
 
-СДЕЛАЙ:
-1) Парсер leagues.xlsx (минимум один лист) -> набор лиг (названия/идентификаторы).
-2) Фильтр: оставляем матчи только нужных лиг.
-3) Модуль DecisionEngine:
-   - на вход Match (коэф 1/X/2 + derived 1X если нужно)
-   - на выход: {bet_type, passes, reasons[]}
-   - правила строго по ТЗ (kf1>kf2 и kf2>kf1 блоки)
-4) Покрой тестами DecisionEngine на 10-15 кейсах.
-
-КРИТЕРИИ:
-- unit-тесты зелёные
-- лог показывает: total matches -> after league filter -> after decision filter
-- PROGRESS.md: шаг 6 DONE
-
-ПОСЛЕ: проверки + коммит: "feat: league filter and decision engine".
-```
+- `src/kush/normalizer.py` — нормализация команд (transliterate, lowercase, punctuation)
+- `src/kush/matcher.py` — EventMatcher: rapidfuzz WRatio, time tolerance, confidence
+- `src/kush/models.py` — KushEvent, MatchResult dataclasses
+- Тесты: test_normalizer.py (10), test_matcher.py (17)
+- Коммит: `feat: NB-Kush event matcher (step 04)`
 
 ---
 
-## PROMPT 07 — Сопоставление матчей NB ↔ Kush (matcher)
-```text
-ЗАДАЧА: реализовать матчинг событий между NB и kushvsporte.ru.
+## STEP 05 — Kush client (session, leagues, events, odds)
 
-ПОДХОД:
-- нормализовать команды (lower, remove punctuation, translit/ru/eng если нужно)
-- учитывать дату/время с допуском (например +/- 2 часа)
-- вернуть confidence score
-
-СДЕЛАЙ:
-1) Интерфейс Matcher: match(nb_match, kush_events[]) -> best_match | null + score.
-2) Набор правил нормализации.
-3) Тесты на нормализацию и матчинг.
-4) Записать в ARCHITECTURE.md как матчинг работает и какие лимиты.
-
-КРИТЕРИИ:
-- matcher выдаёт предсказуемый результат на тестах
-- PROGRESS.md: шаг 7 DONE
-
-ПОСЛЕ: проверки + коммит: "feat: nb-kush matcher".
-```
+- `src/kush/session.py` — requests.Session + CSRF + cookies + login
+- `src/kush/client.py` — KushClient: get_all_events, get_odds, find_event, parse HTML
+- Тесты: test_kush_client.py (22 теста — parsing)
+- Коммит: `feat: Kush client with session and event search (step 05)`
 
 ---
 
-## PROMPT 08 — Kush client (поиск события) + очередь “ожидает Куш”
-```text
-ЗАДАЧА: реализовать KushClient (пока только поиск события) и очередь ожидания.
+## STEP 06 — Kush bet placer + dry-run
 
-СДЕЛАЙ:
-1) Исследуй как проще получать список событий с kushvsporte.ru (HTML или API).
-2) Реализуй метод: findEvent(nb_match) -> kush_event|null.
-3) Если не найдено:
-   - добавить в state очередь pending_kush
-   - зафиксировать timestamp следующей проверки
-4) Логи: “missing on kush” и причины.
-
-КРИТЕРИИ:
-- pending очередь работает и не плодит дубликаты
-- PROGRESS.md: шаг 8 DONE
-
-ПОСЛЕ: проверки + коммит: "feat: kush search and pending queue".
-```
+- `src/kush/bet_placer.py` — ratio check, bet type mapping, add_coupon, create_coupon
+- `src/kush/bet_result.py` — BetResult dataclass
+- Интеграция в main.py: matched → place per passing bet
+- Тесты: test_bet_placer.py (22 теста)
+- Коммит: `feat: Kush bet placer with dry-run (step 06)`
 
 ---
 
-## PROMPT 09 — Автоставка на Куш (интеграция с legacy) + dry-run
-```text
-ЗАДАЧА: реализовать постановку ставки на Куше.
+## STEP 07 — Telegram уведомления
 
-УСЛОВИЯ:
-- формула: KfKush*(1+ROI)/KfNB > threshold (1.10 или 1.05 для big leagues)
-- если проходит — ставим, иначе только сигнал/лог
-- после успешной ставки: пометить в state как "placed" и убрать из pending
-- обязательно: dry-run режим (без реальной ставки)
-
-СДЕЛАЙ:
-1) Переиспользуй максимально код из _legacy/kushvsporte_autostavka (если возможно).
-2) Реализуй KushBetPlacer.place(event, bet_type, stake_amount?) -> result.
-3) Добавь dry-run режим.
-
-КРИТЕРИИ:
-- dry-run проходит end-to-end без реальной ставки
-- PROGRESS.md: шаг 9 DONE
-
-ПОСЛЕ: проверки + коммит: "feat: kush bet placer (dry-run)".
-```
+- `src/telegram/notifier.py` — notify_placed, notify_missing, notify_critical, send_test, send_document
+- MarkdownV2 + fallback, rate-limit, multiple chat_ids
+- `--test-telegram` флаг
+- Тесты: test_telegram.py (16 тестов)
+- Коммит: `feat: Telegram notifications (step 07)`
 
 ---
 
-## PROMPT 10 — Telegram уведомления
-```text
-ЗАДАЧА: TelegramNotifier.
+## STEP 08 — Excel writer
 
-СОБЫТИЯ:
-- match найден и проходит фильтры (строка/таблица)
-- отсутствует на куше
-- ставка проставлена
-- критическая ошибка
-
-СДЕЛАЙ:
-1) Реализация через bot token + chat_ids из config.
-2) Формат сообщений: 1) короткий текст 2) при необходимости “табличная” разметка (моноширинный блок).
-3) Ретраи и защита от flood.
-4) Опционально: `--test-telegram` режим.
-
-КРИТЕРИИ:
-- есть тестовый режим отправки в “dev chat”
-- PROGRESS.md: шаг 10 DONE
-
-ПОСЛЕ: проверки + коммит: "feat: telegram notifier".
-```
+- `src/excel/writer.py` — xlsxwriter, буфер строк, save по дате
+- `src/excel/default_mapper.py` — 24 колонки
+- `src/excel/models.py` — ExcelRow dataclass
+- Тесты: test_excel.py (13 тестов)
+- Коммит: `feat: Excel writer with xlsxwriter (step 08)`
 
 ---
 
-## PROMPT 11 — Excel вывод по шаблону (с возможностью быстро подменить mapping)
-```text
-ЗАДАЧА: ExcelWriter.
+## STEP 09 — Scheduler + режимы запуска
 
-ПРЕДПОСЫЛКА: шаблон заказчика может быть неизвестен на момент реализации — сделай модуль так, чтобы легко подменить mapping колонок.
-
-СДЕЛАЙ:
-1) Создай Excel в output_dir: либо единый файл с дедупом, либо файлы по дате (выбери и зафиксируй в CONFIG/ARCHITECTURE).
-2) Реализуй mapping слой: Match/Decision -> columns (пока заглушка + пример).
-3) Добавь тест(ы) что файл создается и содержит заголовки/строки.
-
-КРИТЕРИИ:
-- формируется xlsx
-- PROGRESS.md: шаг 11 DONE
-
-ПОСЛЕ: проверки + коммит: "feat: excel writer (template-ready)".
-```
+- `src/scheduler/msk_scheduler.py` — compute_next_run, run_once, run_daemon
+- `src/scheduler/cycle_runner.py` — полный цикл: NB → filter → decide → Kush → bet → excel → telegram
+- zoneinfo("Europe/Moscow"), threading.Event для shutdown
+- Тесты: test_scheduler.py (13 тестов)
+- Коммит: `feat: MSK scheduler with once/daemon modes (step 09)`
 
 ---
 
-## PROMPT 12 — Планировщик (08:00 МСК, каждые 4 часа) + режимы запуска
-```text
-ЗАДАЧА: Scheduler и режимы запуска.
+## STEP 10 — Tkinter UI
 
-НУЖНО:
-1) CLI режимы:
-   --once (один цикл и выход)
-   --daemon (работает по расписанию)
-2) Расписание: старт 08:00 МСК, далее каждые 4 часа, окно 14 дней (как настройки).
-3) Грейсфул shutdown (Ctrl+C, закрытие из UI).
-
-КРИТЕРИИ:
-- daemon пишет “next run at …”
-- PROGRESS.md: шаг 12 DONE
-
-ПОСЛЕ: проверки + коммит: "feat: scheduler and run modes".
-```
+- `src/ui/main_window.py` — Tkinter: status panel, log viewer, buttons
+- Кнопки: "Запустить", "Пауза", "Скрыть", "Выход"
+- X → messagebox "Выйти или свернуть?"
+- Thread-safe log через root.after()
+- Коммит: `feat: Tkinter UI window (step 10)`
 
 ---
 
-## PROMPT 13 — UI окно + трей UX (Hide / диалог X / tray menu)
-```text
-ЗАДАЧА: реализовать UI окно и трей UX 1:1 по требованиям.
+## STEP 11 — E2E + PyInstaller packaging
 
-ТРЕБОВАНИЯ:
-- При старте всегда открывается окно
-- В окне есть кнопка/пункт "Скрыть окно" -> уходит в трей
-- Нажатие на X вызывает диалог: "Хотите выйти или свернуть?" кнопки "Выйти" и "Свернуть"
-- В трее правый клик: "Открыть окно" и "Выход" (минимум)
-
-СДЕЛАЙ:
-1) Реализуй окно со статусом (last run, next run, counts) и кнопками: Run now, Hide, Exit.
-2) Привяжи к scheduler/логам/состоянию.
-3) Старайся не раздувать зависимости.
-
-КРИТЕРИИ:
-- UX работает 1:1
-- PROGRESS.md: шаг 13 DONE
-
-ПОСЛЕ: проверки + коммит: "feat: ui window and tray behavior".
-```
+- PyInstaller spec: `--onefile --name parser_nb-bet --add-data assets/data`
+- UPX compression
+- Exclude неиспользуемых модулей
+- Замер размера (цель: <10 МБ)
+- E2E: `--once --dry-run`, `--daemon --dry-run`, `--test-telegram`, UI mode
+- README.md + runbook для заказчика
+- Коммит: `feat: E2E + PyInstaller packaging (step 11)`
 
 ---
 
-## PROMPT 14 — E2E прогон + упаковка в .exe + размер + инструкция заказчику
-```text
-ЗАДАЧА: финальная упаковка и E2E.
+## Верификация
 
-СДЕЛАЙ:
-1) Команда сборки release .exe (scripts/build.*).
-2) Проверь размер .exe (зафиксируй в README).
-3) E2E сценарии:
-   - --once: парсинг -> фильтр -> excel -> (kush search) -> tg
-   - --daemon: расписание
-   - UI: hide to tray, open, exit; X-dialog
-4) Добавь инструкцию для заказчика: запуск, файлы конфигов, логи, типичные проблемы.
-5) Папка dist/ (артефакты) + не коммитить бинарники (по умолчанию).
-
-КРИТЕРИИ:
-- dist/*.exe работает локально (описать зависимости)
-- PROGRESS.md: шаг 14 DONE
-
-ПОСЛЕ: финальные проверки + тег релиза (если используете), коммит: "chore: release packaging and docs".
-```
-
----
-
-## Примечания по контексту (Opus 4.6)
-- Держи в контексте только файлы текущего шага + `ARCHITECTURE.md` + `PROGRESS.md` + `CONFIG.md` + `CLAUDE.md`.
-- Итоги каждого шага записывай в `PROGRESS.md` (20–40 строк максимум), чтобы следующий промт не тащил простыню.
+- Каждый шаг: `python -m pytest tests/ -v`
+- Финал: `dist/parser_nb-bet.exe --once --dry-run` работает
+- Размер: `(Get-Item dist/parser_nb-bet.exe).Length / 1MB` < 10
