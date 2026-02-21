@@ -7,7 +7,7 @@
 | 00 | Создать/обновить CLAUDE.md | ✅ DONE | 2026-02-21 |
 | 01 | Инициализация репо и каркас проекта | ✅ DONE | 2026-02-21 |
 | 02 | Анализ существующих архивов (_legacy) | ✅ DONE | 2026-02-21 |
-| 03 | Выбор финального стека и план сборки | ⬜ TODO | — |
+| 03 | Выбор финального стека и план сборки | ✅ DONE | 2026-02-21 |
 | 04 | Конфигурация, логирование, хранение состояния | ⬜ TODO | — |
 | 05 | Парсер nb-bet Results (MVP) | ⬜ TODO | — |
 | 06 | Фильтр по лигам + бизнес-условия ставок | ⬜ TODO | — |
@@ -95,3 +95,28 @@
 - Шаг 03: зафиксировать стек (добавить FuzzySharp в зависимости)
 - Шаг 05: использовать API endpoint из legacy для NB-парсера
 - Шаг 08-09: воспроизвести CSRF-цепочку Kush на C#
+
+---
+
+## Шаг 03 — DONE (2026-02-21)
+**Задача:** Финальная фиксация стека и стратегия релиза.
+
+**Сделано:**
+- ARCHITECTURE.md обновлён: финальная таблица стека, добавлен FuzzySharp, убран PuppeteerSharp (резерв)
+- Добавлена секция «Стратегия сборки и публикации»: self-contained vs framework-dependent, trimming (отключён), R2R, полная таблица NuGet-зависимостей
+- CONFIG.md: формат logging исправлен с Python-стиля на Serilog (outputTemplate, level=Information)
+- build.ps1 финализирован: добавлены флаги `-FrameworkDependent`, `-Trim`, preflight-проверка dotnet SDK, размер .exe в выводе
+- .editorconfig создан: C# formatting, naming conventions (_camelCase для приватных полей, PascalCase для публичных)
+- nuget.config создан (nuget.org — отсутствовал, restore не работал)
+- csproj: добавлен FuzzySharp, убраны publish-специфичные свойства из csproj (RuntimeIdentifier, SelfContained) — теперь только через CLI в build.ps1, иконка закомментирована (до шага 13)
+
+**Проверки:**
+- `dotnet restore` ✅
+- `dotnet build --configuration Release` ✅ (0 ошибок, 0 предупреждений)
+- `dotnet test` ✅ (тестов пока нет — добавятся в шаге 04)
+- Trial publish — пропущен (долгое скачивание runtime; перенесён на шаг 14)
+
+**Follow-ups:**
+- Шаг 04: config loader, Serilog, SQLite state
+- Шаг 13: добавить icon.ico
+- Шаг 14: полный publish + замер размера .exe

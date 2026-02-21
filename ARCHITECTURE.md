@@ -12,14 +12,14 @@
 | Трей | **`NotifyIcon`** (WinForms stdlib) | Нативный Windows-трей из коробки, контекстное меню, иконка |
 | HTTP | **`HttpClient`** (stdlib) | Встроен в .NET, пул соединений, proxy support |
 | Парсинг HTML | **HtmlAgilityPack** (NuGet) | Стандарт для C#, XPath/LINQ, малый вес |
-| Динамические страницы | **PuppeteerSharp** (резерв, только если нужно) | Если сайт требует JS-рендеринг |
 | Excel | **ClosedXML** (NuGet) | Хороший API, поддержка шаблонов, без COM |
 | Telegram | **`HttpClient`** напрямую (Bot API) | Без тяжёлых SDK, rate-limit руками |
 | Состояние | **SQLite** через `Microsoft.Data.Sqlite` (NuGet) | Надёжно, транзакции, нет внешних зависимостей |
 | Планировщик | **`PeriodicTimer`** + **`TimeZoneInfo`** (stdlib) | Встроен в .NET 6+, timezone MSK через TimeZoneInfo |
 | Retry/backoff | **Polly** (NuGet) | Декларативные retry-политики |
-| Сборка .exe | **`dotnet publish`** | `--self-contained -r win-x64 -p:PublishSingleFile=true` |
-| Логирование | **`Microsoft.Extensions.Logging`** + файловый sink | Или Serilog для ротации файлов |
+| Fuzzy matching | **FuzzySharp** (NuGet) | Порт FuzzyWuzzy для C#, WRatio для матчинга команд |
+| Логирование | **Serilog** (NuGet) | Файловая ротация, консоль, структурированные логи |
+| Сборка .exe | **`dotnet publish`** | Self-contained single-file, win-x64, ~60–80 MB |
 
 ---
 
@@ -221,4 +221,59 @@ ParserNB.GetMatchesAsync()
 | SQLite вместо файла/JSON | Транзакции, надёжность, дедупликация без race conditions |
 | ClosedXML вместо Interop | Без COM/Excel установленного, кросс-сборка |
 | Polly для retry | Стандарт в .NET экосистеме, декларативные политики |
+| FuzzySharp вместо ручного Levenshtein | Порт FuzzyWuzzy, WRatio = аналог legacy (RapidFuzz) |
 | Нет `async` в UI-потоке | `Task.Run` + `Invoke` для обновления UI из фона |
+
+---
+
+## Стратегия сборки и публикации
+
+### Self-contained vs Framework-dependent
+
+| Вариант | Размер .exe | Требования к машине | Выбор |
+|---------|-------------|---------------------|-------|
+| **Self-contained** | ~60–80 MB | Ничего, всё внутри | ✅ Выбрано |
+| Framework-dependent | ~5–10 MB | .NET 8 Runtime на машине | ❌ |
+
+**Обоснование:** заказчику не нужно ставить .NET Runtime. Единый .exe — скопировал и запустил.
+
+### Trimming (IL Linker)
+
+Trimming (`PublishTrimmed=true`) может уменьшить .exe на 30–50%, но несёт риски:
+- **WinForms** использует reflection — часть контролов может быть вырезана.
+- **System.Text.Json** / **ClosedXML** / **SQLite** — reflection-heavy.
+- **Polly v8** — может потерять strategy builders.
+
+**Решение:** Trimming **отключён** по умолчанию. Включаем только после полного E2E-тестирования (шаг 14). При необходимости — добавим `TrimmerRootAssembly` для проблемных сборок.
+
+### ReadyToRun (R2R)
+
+`PublishReadyToRun=true` — AOT-прекомпиляция. Увеличивает .exe на ~10–15%, но ускоряет холодный старт. **Включено.**
+
+### Publish command
+
+```bash
+dotnet publish src/ParserNbBet/ParserNbBet.csproj \
+  --configuration Release \
+  --runtime win-x64 \
+  --self-contained true \
+  -p:PublishSingleFile=true \
+  -p:IncludeNativeLibrariesForSelfExtract=true \
+  -p:PublishReadyToRun=true \
+  --output dist/
+```
+
+### NuGet-зависимости (финальный список)
+
+| Пакет | Версия | Назначение |
+|-------|--------|------------|
+| HtmlAgilityPack | 1.11.* | Парсинг HTML (Kush) |
+| ClosedXML | 0.102.* | Excel-вывод |
+| Microsoft.Data.Sqlite | 8.* | SQLite state store |
+| Polly | 8.* | Retry/backoff |
+| Polly.Extensions.Http | 3.* | HTTP retry helper |
+| Serilog | 4.* | Логирование |
+| Serilog.Sinks.File | 6.* | Файловый sink + ротация |
+| Serilog.Sinks.Console | 6.* | Консольный sink |
+| Serilog.Extensions.Logging | 8.* | Интеграция с ILogger |
+| FuzzySharp | 2.0.* | Fuzzy matching команд |

@@ -9,14 +9,12 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
-    <ApplicationIcon>..\..\assets\icon.ico</ApplicationIcon>
+    <!-- TODO: добавить иконку в assets/icon.ico (шаг 13 — UI) -->
+    <!-- <ApplicationIcon>..\..\assets\icon.ico</ApplicationIcon> -->
 
-    <!-- Single-file self-contained publish -->
-    <PublishSingleFile>true</PublishSingleFile>
-    <SelfContained>true</SelfContained>
-    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
-    <PublishReadyToRun>true</PublishReadyToRun>
-    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <!-- Publish settings (applied only during dotnet publish via build.ps1) -->
+    <!-- RuntimeIdentifier, SelfContained, etc. passed via CLI to avoid
+         forcing RID-specific restore during regular build/test. -->
   </PropertyGroup>
 
   <ItemGroup>
@@ -38,6 +36,9 @@
     <PackageReference Include="Serilog.Sinks.File" Version="6.*" />
     <PackageReference Include="Serilog.Sinks.Console" Version="6.*" />
     <PackageReference Include="Serilog.Extensions.Logging" Version="8.*" />
+
+    <!-- Fuzzy string matching (NB ↔ Kush team names) -->
+    <PackageReference Include="FuzzySharp" Version="2.0.*" />
   </ItemGroup>
 
 </Project>

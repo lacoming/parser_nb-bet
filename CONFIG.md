@@ -65,10 +65,10 @@
     "retry_delay_seconds": 5
   },
   "logging": {
-    "level": "INFO",
-    "max_bytes": 10485760,
-    "backup_count": 5,
-    "format": "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+    "level": "Information",
+    "file_size_limit_bytes": 10485760,
+    "retained_file_count": 5,
+    "output_template": "{Timestamp:yyyy-MM-dd HH:mm:ss.fff} [{Level:u3}] {SourceContext}: {Message:lj}{NewLine}{Exception}"
   }
 }
 ```
