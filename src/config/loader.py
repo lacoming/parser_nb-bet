@@ -105,3 +105,12 @@ def _validate(cfg: AppConfig) -> None:
 
     if errors:
         raise ConfigValidationError(errors)
+
+
+def load_proxies(path: str = "proxies.txt") -> list[str]:
+    """Load proxy list from file. Returns empty list if file missing."""
+    p = Path(path)
+    if not p.exists():
+        return []
+    lines = p.read_text(encoding="utf-8").splitlines()
+    return [line.strip() for line in lines if line.strip() and not line.strip().startswith("#")]

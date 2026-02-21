@@ -21,7 +21,7 @@ C# код остаётся в ветке `main`/`master` как бэкап.
 | 06 | Kush bet placer + dry-run | ✅ DONE | 2026-02-21 |
 | 07 | Telegram уведомления | ✅ DONE | 2026-02-21 |
 | 08 | Excel writer | ✅ DONE | 2026-02-21 |
-| 09 | Scheduler + режимы запуска | ⬜ TODO | — |
+| 09 | Scheduler + режимы запуска | ✅ DONE | 2026-02-21 |
 | 10 | Tkinter UI | ⬜ TODO | — |
 | 11 | E2E + PyInstaller packaging | ⬜ TODO | — |
 
@@ -155,3 +155,17 @@ C# код остаётся в ветке `main`/`master` как бэкап.
 
 **Follow-ups:**
 - Step 09: Scheduler + режимы запуска
+
+## Шаг 09 — DONE (2026-02-21)
+**Задача:** Scheduler + режимы запуска.
+
+**Сделано:**
+- `src/scheduler/msk_scheduler.py` — MskScheduler: MSK timezone (UTC+3), compute_next_run, wait_until_next, run_daemon, graceful shutdown via threading.Event
+- `src/scheduler/cycle_runner.py` — CycleRunner: полный цикл NB→filter→decide→Kush match→bet→excel→telegram
+- `src/config/loader.py` — добавлен load_proxies()
+- `src/main.py` — интегрированы --once и --daemon режимы с полным cycle
+- `tests/test_scheduler.py` — 19 тестов
+- Все 245 тестов проходят
+
+**Follow-ups:**
+- Step 10: Tkinter UI

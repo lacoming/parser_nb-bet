@@ -76,15 +76,56 @@ def main() -> None:
                 logger.error("Failed to send to chat %s: %s", r.chat_id, r.error)
         return
 
+    # Build shared components for cycle
+    from src.config.loader import load_proxies
+    from src.decision.engine import DecisionEngine
+    from src.decision.league_filter import LeagueFilter
+    from src.decision.league_loader import load_league_settings
+    from src.excel.writer import ExcelWriter
+    from src.nb.client import NbClient
+    from src.scheduler.cycle_runner import run_cycle
+    from src.scheduler.msk_scheduler import MskScheduler
+    from src.telegram.notifier import TelegramNotifier
+
+    proxies = load_proxies(config.proxies.file) if config.proxies.enabled else []
+    nb_client = NbClient(config=config.nb, proxy_list=proxies)
+    league_settings = load_league_settings(config.files.leagues_xlsx_path)
+    league_filter = LeagueFilter(settings=league_settings)
+    decision_engine = DecisionEngine()
+    excel_writer = ExcelWriter(output_dir=config.files.output_dir)
+    telegram = TelegramNotifier(
+        token=config.telegram.token,
+        chat_ids=config.telegram.chat_ids,
+        rate_limit=config.telegram.rate_limit_seconds,
+    )
+
+    def do_cycle() -> None:
+        run_cycle(
+            config=config,
+            state=state,
+            nb_client=nb_client,
+            league_filter=league_filter,
+            decision_engine=decision_engine,
+            excel_writer=excel_writer,
+            telegram=telegram,
+            proxies=proxies,
+        )
+
     # Run mode
     if args.once:
-        logger.info("Running single cycle... (TODO step 09)")
+        logger.info("Running single cycle...")
+        do_cycle()
     elif args.daemon:
-        logger.info("Starting daemon mode... (TODO step 09)")
+        logger.info("Starting daemon mode...")
+        scheduler = MskScheduler(
+            start_time_msk=config.schedule.start_time_msk,
+            interval_hours=config.schedule.interval_hours,
+        )
+        scheduler.run_daemon(do_cycle)
     else:
         logger.info("Starting GUI mode... (TODO step 10)")
 
-    logger.info("boot ok")
+    logger.info("Done")
 
 
 if __name__ == "__main__":
