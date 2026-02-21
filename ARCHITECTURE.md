@@ -96,11 +96,25 @@ parser_nb-bet/
 - **Порог:** < 0.80 (настраивается через `KushConfig.MinConfidence`) → не ставим, только лог.
 - **Namespace:** `ParserNbBet.Kush`
 
-### KushClient (`Kush/`)
-- **Назначение:** Получить список событий с `kushvsporte.ru`.
+### KushSession (`Kush/KushSession.cs`)
+- **Назначение:** HTTP-сессия с kushvsporte.ru, CSRF/cookie management.
+- **Ключевые методы:**
+  - `InitializeAsync(sport, day)` — GET /centerbet/{sport}?day={day}, извлечение CSRF-токена из `<meta name="csrf-token">`
+  - `LoginAsync()` — POST /users/login (form data + _csrf)
+  - `PostAjaxAsync(url, formData)` — POST с X-CSRF-Token, X-Requested-With: XMLHttpRequest
+  - `GetPjaxAsync(url)` — GET с X-PJAX headers (для форм купонов)
+- **Cookie management:** CookieContainer (PHPSESSID + _csrf автоматически)
+- **Namespace:** `ParserNbBet.Kush`
+
+### KushClient (`Kush/KushClient.cs`)
+- **Назначение:** Поиск событий на kushvsporte.ru + fuzzy matching с NB.
 - **Методы:**
-  - `GetEventsAsync()` → `IReadOnlyList<KushEvent>`
-  - `FindEventAsync(Match)` → `KushEvent?`
+  - `GetAllEventsAsync(sport)` → `IReadOnlyList<KushEvent>` (today + tomorrow)
+  - `GetEventsForLeagueAsync(cid, day)` → POST /bet/event-list
+  - `GetOddsAsync(eventId, eventLink)` → POST /bet/cf-list → `IReadOnlyDictionary<string, KushOddsEntry>`
+  - `FindEventAsync(Match)` → `MatchResult` (через EventMatcher)
+- **HTML parsing:** HtmlAgilityPack — div.row для событий, button.coefLink для коэфов
+- **Rate-limiting:** 1.8 сек между запросами
 - **Namespace:** `ParserNbBet.Kush`
 
 ### KushBetPlacer (`Kush/`)

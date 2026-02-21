@@ -12,7 +12,7 @@
 | 05 | Парсер nb-bet Results (MVP) | ✅ DONE | 2026-02-21 |
 | 06 | Фильтр по лигам + бизнес-условия ставок | ✅ DONE | 2026-02-21 |
 | 07 | Matcher NB ↔ Kush | ✅ DONE | 2026-02-21 |
-| 08 | KushClient (поиск события) + очередь ожидания | ⬜ TODO | — |
+| 08 | KushClient (поиск события) + очередь ожидания | ✅ DONE | 2026-02-21 |
 | 09 | Автоставка на Куш + dry-run | ⬜ TODO | — |
 | 10 | Telegram уведомления | ⬜ TODO | — |
 | 11 | Excel вывод по шаблону | ⬜ TODO | — |
@@ -232,3 +232,42 @@
 **Follow-ups:**
 - Шаг 08: KushClient (HTTP, CSRF chain, поиск события) + pending queue
 - Шаг 09: KushBetPlacer (авторизация, ratio check, dry-run)
+
+---
+
+## Шаг 08 — DONE (2026-02-21)
+**Задача:** KushClient (поиск события на kushvsporte.ru) + интеграция с pending queue.
+
+**Сделано:**
+- `Kush/KushSession.cs` — HTTP-сессия с kushvsporte.ru:
+  - Автоматическое управление cookies (PHPSESSID, _csrf) через CookieContainer
+  - Извлечение CSRF-токена из `<meta name="csrf-token">` при инициализации
+  - PostAjaxAsync — AJAX POST с CSRF-заголовками (X-CSRF-Token, X-Requested-With)
+  - GetPjaxAsync — GET с PJAX-заголовками (для формы купона в шаге 09)
+  - LoginAsync — авторизация (POST /users/login с формой + _csrf)
+  - Proxy support, Polly retry (3 попытки)
+- `Kush/KushClient.cs` — клиент поиска событий:
+  - GetAllEventsAsync — получение событий за 2 дня (today + tomorrow)
+  - GetEventsForLeagueAsync — POST /bet/event-list по CID лиги
+  - GetOddsAsync — POST /bet/cf-list по event ID
+  - FindEventAsync — fuzzy поиск NB-матча среди Kush-событий (через EventMatcher)
+  - ParseEventsHtml — парсинг HTML ответа event-list (div.row → команды, ссылка, дата)
+  - ParseOddsHtml — парсинг HTML cf-list (button.coefLink → ставка, коэф, URL)
+  - ParseKushDateTime — конвертация дат Kush (dd.MM.yyyy HH.mm MSK → UTC)
+  - ExtractEventId — извлечение ID из URL /event/{id}-{slug}
+  - ExtractCouponIds — eid+cfid из URL купона
+  - Rate-limiting: 1.8 сек между запросами
+- `KushLeague`, `KushOddsEntry` — вспомогательные модели
+- `Program.cs` — интеграция:
+  - RunKushMatching — для каждого passing match: поиск на Куше → matched или enqueue pending
+  - ProcessPendingQueue — перепроверка due pending: found → resolved, expired → removed
+  - Дедуп через StateStore.IsKnown (не создаёт дубликатов)
+- 22 теста KushClientTests: ExtractEventId (5), ParseKushDateTime (4), ExtractCouponIds (4), ParseEventsHtml (5), ParseOddsHtml (4)
+
+**Проверки:**
+- `dotnet build --configuration Release` ✅ (0 ошибок, 0 предупреждений)
+- `dotnet test` ✅ (101/101 passed: 79 old + 22 new)
+
+**Follow-ups:**
+- Шаг 09: KushBetPlacer — авторизация, ratio check, coupon placement, dry-run
+- Шаг 10: TelegramNotifier — уведомления missing/placed
