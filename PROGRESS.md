@@ -20,7 +20,7 @@ C# код остаётся в ветке `main`/`master` как бэкап.
 | 05 | Kush client (session, events, odds) | ✅ DONE | 2026-02-21 |
 | 06 | Kush bet placer + dry-run | ✅ DONE | 2026-02-21 |
 | 07 | Telegram уведомления | ✅ DONE | 2026-02-21 |
-| 08 | Excel writer | ⬜ TODO | — |
+| 08 | Excel writer | ✅ DONE | 2026-02-21 |
 | 09 | Scheduler + режимы запуска | ⬜ TODO | — |
 | 10 | Tkinter UI | ⬜ TODO | — |
 | 11 | E2E + PyInstaller packaging | ⬜ TODO | — |
@@ -142,3 +142,16 @@ C# код остаётся в ветке `main`/`master` как бэкап.
 
 **Follow-ups:**
 - Step 08: Excel writer
+
+## Шаг 08 — DONE (2026-02-21)
+**Задача:** Excel writer.
+
+**Сделано:**
+- `src/excel/models.py` — ExcelRow dataclass (29 полей, as_list() для записи)
+- `src/excel/default_mapper.py` — 29 колонок: дата, время, лига, команды, счёт, коэффициенты, ставки
+- `src/excel/writer.py` — ExcelWriter: буфер строк, xlsxwriter с форматированием, Table Style Medium 3
+- `tests/test_excel.py` — 20 тестов
+- Все 226 тестов проходят
+
+**Follow-ups:**
+- Step 09: Scheduler + режимы запуска
