@@ -9,7 +9,7 @@
 | 02 | Анализ существующих архивов (_legacy) | ✅ DONE | 2026-02-21 |
 | 03 | Выбор финального стека и план сборки | ✅ DONE | 2026-02-21 |
 | 04 | Конфигурация, логирование, хранение состояния | ✅ DONE | 2026-02-21 |
-| 05 | Парсер nb-bet Results (MVP) | ⬜ TODO | — |
+| 05 | Парсер nb-bet Results (MVP) | ✅ DONE | 2026-02-21 |
 | 06 | Фильтр по лигам + бизнес-условия ставок | ⬜ TODO | — |
 | 07 | Matcher NB ↔ Kush | ⬜ TODO | — |
 | 08 | KushClient (поиск события) + очередь ожидания | ⬜ TODO | — |
@@ -143,3 +143,29 @@
 **Follow-ups:**
 - Шаг 05: NB-Bet парсер (использовать JSON API из legacy)
 - Шаг 06: leagues + DecisionEngine
+
+---
+
+## Шаг 05 — DONE (2026-02-21)
+**Задача:** Парсер nb-bet Results (MVP).
+
+**Сделано:**
+- `Nb/Match.cs` — модель матча: League, TeamHome, TeamAway, StartTimeUtc, NbSlug, Sport, Odds1/X/2 (Start+End), Odds1XEnd (derived), MatchKey для дедупа
+- `Nb/NbClient.cs` — HTTP-клиент к NB-Bet JSON API:
+  - URL: `app.nb-bet.com/v1/{soccer|hockey}/math-analysis/page?timestamp={unix_ms}`
+  - Обязательные headers (Origin, Referer, User-Agent) из legacy
+  - Proxy support через HttpClientHandler.Proxy (из ProxyConfig)
+  - Retry/backoff через Polly ResiliencePipeline (конфигурируемое количество/задержка)
+  - `GetMatchesAsync(windowDays)` — итерация по дням, агрегация матчей
+  - `ParseResponse(json)` — static, парсинг JSON → List<Match>, public для тестирования
+  - Обработка: null odds, string/number timestamp, пустые команды (skip)
+- `Program.cs` — RunHeadless подключён: NbClient → лог кол-ва матчей + 3 примера
+- 14 тестов NbClientTests: count, league, teams, timestamp, start/end odds, null odds, match_key, Odds1XEnd, sport, empty JSON, no leagues, skip без команд, string odds
+
+**Проверки:**
+- `dotnet build --configuration Release` ✅ (0 ошибок, 0 предупреждений)
+- `dotnet test` ✅ (29/29 passed: 15 old + 14 new)
+
+**Follow-ups:**
+- Шаг 06: LeagueLoader + LeagueFilter + DecisionEngine
+- Шаг 08: KushClient использует тот же HttpClient-подход с proxy

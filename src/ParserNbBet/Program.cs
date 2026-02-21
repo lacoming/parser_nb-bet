@@ -1,5 +1,6 @@
 using ParserNbBet.Config;
 using ParserNbBet.Logging;
+using ParserNbBet.Nb;
 using ParserNbBet.State;
 using ParserNbBet.Ui;
 using Serilog;
@@ -84,8 +85,25 @@ static class Program
 
     static void RunHeadless(CliArgs args, AppConfig config, StateStore state)
     {
-        // Stub — will be filled in Step 05 (parser) + Step 12 (scheduler)
         Log.Information("Headless cycle starting...");
+
+        using var nbClient = new NbClient(config.Nb, config.Proxies);
+        var windowDays = config.Schedule.WindowDays;
+
+        // Fetch soccer matches
+        var matches = nbClient.GetMatchesAsync(windowDays, "soccer").GetAwaiter().GetResult();
+        Log.Information("NB fetched: {Count} soccer matches over {Days} days", matches.Count, windowDays);
+
+        // Show first 3 as examples
+        foreach (var m in matches.Take(3))
+        {
+            Log.Information("  Example: {Match}", m);
+        }
+
+        // TODO step 06: league filter + decision engine
+        // TODO step 08: kush matching
+        // TODO step 12: scheduler integration
+
         Log.Information("Headless cycle complete.");
     }
 }
