@@ -1,10 +1,6 @@
-using System.Text.Json;
 using ParserNbBet.Config;
-using ParserNbBet.Decision;
-using ParserNbBet.Excel;
-using ParserNbBet.Kush;
 using ParserNbBet.Logging;
-using ParserNbBet.Nb;
+using ParserNbBet.Scheduler;
 using ParserNbBet.State;
 using ParserNbBet.Telegram;
 using ParserNbBet.Ui;
@@ -16,12 +12,13 @@ namespace ParserNbBet;
 /// Entry point.
 /// Usage:
 ///   parser_nb-bet.exe --once      — one cycle then exit (no UI)
-///   parser_nb-bet.exe --daemon    — run on schedule (with UI)
-///   parser_nb-bet.exe             — open UI window (default)
+///   parser_nb-bet.exe --daemon    — run on schedule (no UI, headless)
+///   parser_nb-bet.exe             — open UI window + daemon scheduler
 ///
 /// Optional flags:
 ///   --dry-run                     — no real bets placed
 ///   --config path/to/config.json  — custom config path
+///   --test-telegram               — send test message and exit
 /// </summary>
 static class Program
 {
@@ -63,19 +60,45 @@ static class Program
 
             Log.Information("boot ok");
 
-            // Headless --once mode: no WinForms, just run cycle and exit
-            if (parsed.Once)
+            // Telegram notifier (shared across modes)
+            using var telegram = new TelegramNotifier(config.Telegram);
+            if (telegram.IsConfigured)
+                Log.Information("  telegram: configured ({Count} chats)", config.Telegram.ChatIds.Count);
+            else
+                Log.Information("  telegram: not configured (skipping notifications)");
+
+            // Handle --test-telegram
+            if (parsed.TestTelegram)
             {
-                RunHeadless(parsed, config, state);
+                var ok = telegram.SendTestAsync().GetAwaiter().GetResult();
+                Log.Information("Telegram test: {Result}", ok ? "sent" : "failed");
                 return;
             }
 
-            // WinForms application (--daemon or default interactive)
+            // Create cycle runner (shared logic for all modes)
+            var runner = new CycleRunner(config, state, telegram);
+
+            // ── --once: single headless cycle ──────────────────────────────────
+            if (parsed.Once)
+            {
+                var scheduler = new MskScheduler(config.Schedule, ct => runner.RunAsync(ct));
+                scheduler.RunOnceAsync().GetAwaiter().GetResult();
+                return;
+            }
+
+            // ── --daemon: headless scheduled loop ──────────────────────────────
+            if (parsed.Daemon)
+            {
+                RunHeadlessDaemon(config, runner);
+                return;
+            }
+
+            // ── Default: WinForms UI + daemon in background ────────────────────
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
             Application.SetHighDpiMode(HighDpiMode.SystemAware);
 
-            Application.Run(new MainForm(parsed));
+            Application.Run(new MainForm(parsed, config, runner));
         }
         catch (Exception ex)
         {
@@ -88,274 +111,36 @@ static class Program
         }
     }
 
-    static void RunHeadless(CliArgs args, AppConfig config, StateStore state)
+    /// <summary>
+    /// Headless daemon: scheduler loop with Ctrl+C graceful shutdown.
+    /// </summary>
+    static void RunHeadlessDaemon(AppConfig config, CycleRunner runner)
     {
-        Log.Information("Headless cycle starting...");
+        using var cts = new CancellationTokenSource();
 
-        using var telegram = new TelegramNotifier(config.Telegram);
-        if (telegram.IsConfigured)
-            Log.Information("  telegram: configured ({Count} chats)", config.Telegram.ChatIds.Count);
-        else
-            Log.Information("  telegram: not configured (skipping notifications)");
-
-        // Handle --test-telegram
-        if (args.TestTelegram)
+        Console.CancelKeyPress += (_, e) =>
         {
-            var ok = telegram.SendTestAsync().GetAwaiter().GetResult();
-            Log.Information("Telegram test: {Result}", ok ? "sent" : "failed");
-            return;
-        }
+            e.Cancel = true;
+            Log.Information("Ctrl+C received, shutting down...");
+            cts.Cancel();
+        };
 
-        using var nbClient = new NbClient(config.Nb, config.Proxies);
-        var windowDays = config.Schedule.WindowDays;
+        var scheduler = new MskScheduler(config.Schedule, ct => runner.RunAsync(ct));
 
-        // Fetch soccer matches
-        var matches = nbClient.GetMatchesAsync(windowDays, "soccer").GetAwaiter().GetResult();
-        Log.Information("NB fetched: {Count} soccer matches over {Days} days", matches.Count, windowDays);
-
-        // League filter
-        var leagueSettings = LoadLeagues(config);
-        var leagueRenames = LoadLeagueRenames();
-        var filter = new LeagueFilter(leagueSettings, leagueRenames);
-        var filtered = filter.Filter(matches);
-        Log.Information("After league filter: {Count}/{Total}", filtered.Count, matches.Count);
-
-        // Decision engine
-        var passingMatches = new List<(Match Match, LeagueSetting Setting, MatchDecision Decision)>();
-        foreach (var (match, setting) in filtered)
+        scheduler.NextRunComputed += nextUtc =>
         {
-            var decision = DecisionEngine.Evaluate(match);
-            if (decision.AnyPasses)
-            {
-                passingMatches.Add((match, setting, decision));
-                var bets = string.Join(", ", decision.PassingBets.Select(d => d.BetType));
-                Log.Information("  PASS: {Match} -> bets: {Bets}", match, bets);
-            }
-        }
-        Log.Information("After decision: {PassCount}/{FilteredCount} matches pass",
-            passingMatches.Count, filtered.Count);
+            var msk = TimeZoneInfo.ConvertTimeFromUtc(nextUtc,
+                TimeZoneInfo.FindSystemTimeZoneById("Russian Standard Time"));
+            Console.WriteLine($"Next run: {msk:yyyy-MM-dd HH:mm:ss} MSK");
+        };
 
-        // Excel writer
-        var excel = new ExcelWriter(config.Files.OutputDir);
-
-        // Kush matching + pending queue
-        var (matched, placed, pending) = RunKushMatching(config, state, telegram, excel, passingMatches);
-
-        // Process pending queue (re-check previously queued matches)
-        ProcessPendingQueue(config, state, telegram, excel);
-
-        // Save Excel
-        var excelPath = excel.Save();
-        if (excelPath != null)
-            Log.Information("Excel saved: {Path} ({Rows} rows)", excelPath, excel.RowCount);
-
-        // Cycle summary notification
-        telegram.NotifyCycleSummaryAsync(
-            matches.Count, filtered.Count, passingMatches.Count,
-            matched, placed, pending, config.Kush.DryRun).GetAwaiter().GetResult();
-
-        // TODO step 12: scheduler integration
-
-        Log.Information("Headless cycle complete.");
-    }
-
-    static (int matched, int placed, int pending) RunKushMatching(AppConfig config, StateStore state,
-        TelegramNotifier telegram, ExcelWriter excel,
-        List<(Match Match, LeagueSetting Setting, MatchDecision Decision)> passingMatches)
-    {
-        if (passingMatches.Count == 0) return (0, 0, 0);
-
-        Log.Information("Kush matching: checking {Count} passing matches...", passingMatches.Count);
-
-        using var kushClient = new KushClient(config.Kush, config.Proxies);
-        var betPlacer = new KushBetPlacer(kushClient, config.Kush, config.Thresholds);
-        int matched = 0, pending = 0, skipped = 0, placed = 0;
-
-        foreach (var (match, setting, decision) in passingMatches)
+        try
         {
-            // Skip if already known (placed or pending)
-            if (state.IsKnown(match.MatchKey))
-            {
-                Log.Debug("  SKIP (already known): {Match}", match);
-                skipped++;
-                continue;
-            }
-
-            try
-            {
-                var result = kushClient.FindEventAsync(match).GetAwaiter().GetResult();
-
-                if (result.IsAccepted && result.KushEvent != null)
-                {
-                    matched++;
-                    Log.Information("  MATCHED: {NbMatch} → {KushEvent} (confidence={Confidence:F3})",
-                        match, result.KushEvent, result.Confidence);
-
-                    // Try placing bet for each passing bet type
-                    foreach (var bet in decision.PassingBets)
-                    {
-                        var betResult = betPlacer.PlaceAsync(
-                            match, result.KushEvent, bet, setting).GetAwaiter().GetResult();
-
-                        Log.Information("  BET: {Result}", betResult);
-
-                        if (betResult.Success || betResult.DryRun)
-                        {
-                            placed++;
-                            state.RecordBet(match.MatchKey, betResult.BetType,
-                                betResult.KushEventId, betResult.OddsNb, betResult.OddsKush,
-                                betResult.Stake, betResult.Ratio, betResult.DryRun);
-                            telegram.NotifyPlacedAsync(match, betResult).GetAwaiter().GetResult();
-                            excel.AddRow(ExcelWriter.BuildRow(match, bet, betResult, result.KushEvent));
-                            break; // One bet per match
-                        }
-                    }
-                }
-                else
-                {
-                    // Not found on Kush → enqueue pending
-                    var betTypes = string.Join(",", decision.PassingBets.Select(d => d.BetType));
-                    var enqueued = state.Enqueue(
-                        match.MatchKey, match.League, match.TeamHome, match.TeamAway,
-                        match.StartTimeUtc, match.NbSlug, betTypes);
-
-                    if (enqueued)
-                    {
-                        pending++;
-                        Log.Information("  PENDING: {Match} — {Reason}", match, result.Reason);
-                        telegram.NotifyMissingAsync(match, result.Reason).GetAwaiter().GetResult();
-                        // Write first passing bet to Excel as pending
-                        var firstBet = decision.PassingBets.FirstOrDefault();
-                        if (firstBet != null)
-                            excel.AddRow(ExcelWriter.BuildRow(match, firstBet, status: "pending"));
-                    }
-                    else
-                    {
-                        skipped++;
-                        Log.Debug("  SKIP (already pending): {Match}", match);
-                    }
-                }
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                Log.Warning(ex, "  ERROR matching {Match}, enqueueing as pending", match);
-
-                var betTypes = string.Join(",", decision.PassingBets.Select(d => d.BetType));
-                state.Enqueue(match.MatchKey, match.League, match.TeamHome, match.TeamAway,
-                    match.StartTimeUtc, match.NbSlug, betTypes);
-                pending++;
-            }
+            scheduler.RunDaemonAsync(cts.Token).GetAwaiter().GetResult();
         }
-
-        Log.Information("Kush matching done: {Matched} matched, {Placed} placed, {Pending} pending, {Skipped} skipped",
-            matched, placed, pending, skipped);
-        return (matched, placed, pending);
-    }
-
-    static void ProcessPendingQueue(AppConfig config, StateStore state, TelegramNotifier telegram, ExcelWriter excel)
-    {
-        var duePending = state.GetDuePending();
-        if (duePending.Count == 0)
+        catch (OperationCanceledException)
         {
-            Log.Debug("Pending queue: no due items");
-            return;
+            Log.Information("Daemon shutdown complete.");
         }
-
-        Log.Information("Pending queue: {Count} due items to re-check", duePending.Count);
-
-        using var kushClient = new KushClient(config.Kush, config.Proxies);
-        var betPlacer = new KushBetPlacer(kushClient, config.Kush, config.Thresholds);
-        int resolved = 0, placed = 0;
-
-        foreach (var pm in duePending)
-        {
-            // Skip if match already started (past startTimeUtc)
-            if (pm.StartTimeUtc < DateTime.UtcNow)
-            {
-                Log.Information("  EXPIRED: {Match} (started {Start:HH:mm})", pm.MatchKey, pm.StartTimeUtc);
-                state.RemovePending(pm.MatchKey);
-                continue;
-            }
-
-            try
-            {
-                // Create a temporary Match object for matching
-                var tempMatch = new Match(pm.League, pm.TeamHome, pm.TeamAway,
-                    pm.StartTimeUtc, pm.NbUrl, "soccer");
-
-                var result = kushClient.FindEventAsync(tempMatch).GetAwaiter().GetResult();
-
-                if (result.IsAccepted && result.KushEvent != null)
-                {
-                    resolved++;
-                    Log.Information("  RESOLVED: {Match} → {KushEvent} (confidence={Confidence:F3})",
-                        pm.MatchKey, result.KushEvent, result.Confidence);
-
-                    // Try placing bet for each stored bet type
-                    var betTypes = pm.BetType.Split(',', StringSplitOptions.RemoveEmptyEntries);
-                    foreach (var bt in betTypes)
-                    {
-                        var fakeBet = new BetDecision { BetType = bt.Trim(), Passes = true };
-                        var betResult = betPlacer.PlaceAsync(
-                            tempMatch, result.KushEvent, fakeBet).GetAwaiter().GetResult();
-
-                        Log.Information("  BET: {Result}", betResult);
-
-                        if (betResult.Success || betResult.DryRun)
-                        {
-                            placed++;
-                            state.RecordBet(pm.MatchKey, betResult.BetType,
-                                betResult.KushEventId, betResult.OddsNb, betResult.OddsKush,
-                                betResult.Stake, betResult.Ratio, betResult.DryRun);
-                            telegram.NotifyPlacedAsync(tempMatch, betResult).GetAwaiter().GetResult();
-                            excel.AddRow(ExcelWriter.BuildRow(tempMatch, fakeBet, betResult, result.KushEvent));
-                            break;
-                        }
-                    }
-
-                    state.RemovePending(pm.MatchKey);
-                }
-                else
-                {
-                    // Still not found — reschedule next check
-                    var nextCheck = DateTime.UtcNow.AddMinutes(30);
-                    state.UpdateNextCheck(pm.MatchKey, nextCheck);
-                    Log.Debug("  STILL PENDING: {Match}, next check at {Next:HH:mm}",
-                        pm.MatchKey, nextCheck);
-                }
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                Log.Warning(ex, "  ERROR re-checking {Match}", pm.MatchKey);
-                state.UpdateNextCheck(pm.MatchKey, DateTime.UtcNow.AddMinutes(30));
-            }
-        }
-
-        Log.Information("Pending queue: {Resolved}/{Total} resolved, {Placed} bets placed",
-            resolved, duePending.Count, placed);
-    }
-
-    static List<LeagueSetting> LoadLeagues(AppConfig config)
-    {
-        var path = config.Files.LeaguesXlsxPath;
-        if (!File.Exists(path))
-        {
-            Log.Warning("leagues.xlsx not found at {Path}, skipping league filter (all matches pass)", path);
-            return [];
-        }
-        return LeagueLoader.Load(path);
-    }
-
-    static Dictionary<string, string>? LoadLeagueRenames()
-    {
-        var path = Path.Combine("assets", "data", "sl_chemps_zamen.json");
-        if (!File.Exists(path))
-        {
-            Log.Debug("sl_chemps_zamen.json not found, skipping league renames");
-            return null;
-        }
-
-        var json = File.ReadAllText(path);
-        return JsonSerializer.Deserialize<Dictionary<string, string>>(json);
     }
 }

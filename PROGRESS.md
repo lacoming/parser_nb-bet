@@ -16,7 +16,7 @@
 | 09 | Автоставка на Куш + dry-run | ✅ DONE | 2026-02-21 |
 | 10 | Telegram уведомления | ✅ DONE | 2026-02-21 |
 | 11 | Excel вывод по шаблону | ✅ DONE | 2026-02-21 |
-| 12 | Планировщик + режимы запуска | ⬜ TODO | — |
+| 12 | Планировщик + режимы запуска | ✅ DONE | 2026-02-21 |
 | 13 | UI окно + трей UX | ⬜ TODO | — |
 | 14 | E2E прогон + упаковка в .exe | ⬜ TODO | — |
 
@@ -365,3 +365,41 @@
 **Follow-ups:**
 - Шаг 12: Scheduler + режимы запуска (--once / --daemon)
 - Шаг 13: UI окно + трей UX
+
+---
+
+## Шаг 12 — DONE (2026-02-21)
+**Задача:** Планировщик + режимы запуска (--once / --daemon / UI).
+
+**Сделано:**
+- `Scheduler/MskScheduler.cs` — планировщик на базе PeriodicTimer:
+  - `ComputeNextRunUtc(nowUtc, config)` — статический метод, вычисление следующего слота по MSK
+  - Слоты: startTimeMsk, +interval, +2*interval... (до конца дня), затем следующий день
+  - `RunOnceAsync()` — однократный запуск цикла (для --once)
+  - `RunDaemonAsync(ct)` — loop: compute next → wait → execute → repeat
+  - Events: NextRunComputed, CycleStarted, CycleFinished (для UI)
+  - Graceful shutdown через CancellationToken + Stop()
+  - MSK timezone: `TimeZoneInfo.FindSystemTimeZoneById("Russian Standard Time")`
+- `Scheduler/CycleRunner.cs` — извлечение цикла из Program.RunHeadless:
+  - `RunAsync(ct)` — полный цикл: NB fetch → filter → decide → Kush match → bet → excel → notify
+  - `LastResult` — CycleResult record для отображения в UI
+  - Все операции async + CancellationToken support
+- `Program.cs` — полная переработка:
+  - `--once`: MskScheduler.RunOnceAsync() → exit
+  - `--daemon`: RunHeadlessDaemon() → PeriodicTimer loop, Ctrl+C shutdown
+  - Default (UI): MainForm + daemon в background Task
+- `Ui/MainForm.cs` — обновлён:
+  - Принимает AppConfig + CycleRunner
+  - Кнопка "Запустить сейчас" (ручной цикл)
+  - Статус label: next run, last result counts
+  - Tray menu: + "Запустить сейчас"
+  - Graceful shutdown: Stop scheduler при ForceExit
+- 13 тестов MskSchedulerTests: NextSlot (8 кейсов: before/after slots, next day, custom start/interval, exact-on-slot, with minutes), RunOnce (execute, events, failure), Daemon (pre-cancelled, cancel-after-start)
+
+**Проверки:**
+- `dotnet build --configuration Release` ✅ (0 ошибок, 0 предупреждений)
+- `dotnet test` ✅ (165/165 passed: 152 old + 13 new)
+
+**Follow-ups:**
+- Шаг 13: UI окно + трей UX (доработка дизайна, привязка логов)
+- Шаг 14: E2E прогон + упаковка в .exe
