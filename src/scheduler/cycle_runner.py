@@ -120,6 +120,7 @@ def run_cycle(
             base_url=config.kush.base_url,
             proxy=proxies[0] if proxies else None,
         )
+        kush_session.init_csrf()
         kush_client = KushClient(kush_session)
         all_events = kush_client.get_all_events()
         log.info("Fetched %d Kush events", len(all_events))
