@@ -18,7 +18,7 @@ C# код остаётся в ветке `main`/`master` как бэкап.
 | 03 | Фильтр лиг + DecisionEngine | ✅ DONE | 2026-02-21 |
 | 04 | Matcher NB ↔ Kush | ✅ DONE | 2026-02-21 |
 | 05 | Kush client (session, events, odds) | ✅ DONE | 2026-02-21 |
-| 06 | Kush bet placer + dry-run | ⬜ TODO | — |
+| 06 | Kush bet placer + dry-run | ✅ DONE | 2026-02-21 |
 | 07 | Telegram уведомления | ⬜ TODO | — |
 | 08 | Excel writer | ⬜ TODO | — |
 | 09 | Scheduler + режимы запуска | ⬜ TODO | — |
@@ -112,3 +112,17 @@ C# код остаётся в ветке `main`/`master` как бэкап.
 
 **Follow-ups:**
 - Step 06: Kush bet placer + dry-run
+
+## Шаг 06 — DONE (2026-02-21)
+**Задача:** Kush bet placer + dry-run.
+
+**Сделано:**
+- `src/kush/bet_result.py` — BetResult dataclass (match_key, kf_nb/kf_kush, ratio, threshold, placed, dry_run, success, summary)
+- `src/kush/bet_placer.py` — BetPlacer: compute_ratio, check_ratio, get_threshold (big/default leagues), place_bet (dry-run + real), _add_coupon (GET form tokens), _create_coupon (POST with stake)
+- `tests/test_bet_placer.py` — 29 тестов (ratio calc, threshold, dry-run, real placement, login failure, error extraction, edge cases)
+- Портирован flow из legacy: get_all_variants_po_stavkam → add_coupon → create_coupon
+- Формула ratio: `kf_kush * (1 + ROI) / kf_nb > threshold`
+- Все 180 тестов проходят
+
+**Follow-ups:**
+- Step 07: Telegram уведомления
