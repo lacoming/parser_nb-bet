@@ -22,7 +22,7 @@ C# код остаётся в ветке `main`/`master` как бэкап.
 | 07 | Telegram уведомления | ✅ DONE | 2026-02-21 |
 | 08 | Excel writer | ✅ DONE | 2026-02-21 |
 | 09 | Scheduler + режимы запуска | ✅ DONE | 2026-02-21 |
-| 10 | Tkinter UI | ⬜ TODO | — |
+| 10 | Tkinter UI | ✅ DONE | 2026-02-21 |
 | 11 | E2E + PyInstaller packaging | ⬜ TODO | — |
 
 ---
@@ -169,3 +169,20 @@ C# код остаётся в ветке `main`/`master` как бэкап.
 
 **Follow-ups:**
 - Step 10: Tkinter UI
+
+## Шаг 10 — DONE (2026-02-21)
+**Задача:** Tkinter UI.
+
+**Сделано:**
+- `src/ui/main_window.py` — MainWindow: status panel (StringVar), stats bar, dark-themed log viewer (ScrolledText, Consolas), 4 кнопки
+- QueueLogHandler: thread-safe logging.Handler → queue → root.after() → Text widget
+- Кнопки: "Запустить" (start daemon in thread), "Пауза"/"Продолжить" (toggle), "Скрыть" (iconify), "Выход"
+- Закрытие окна (X): messagebox "Выйти/Свернуть/Отмена" (askyesnocancel)
+- Thread-safe: set_status(), update_stats() проверяют current_thread и используют root.after()
+- Log trimming: MAX_LINES=5000, trim to 4000 при переполнении
+- `src/main.py` — GUI mode: window создаётся до setup_logging для захвата всех сообщений; on_start запускает первый цикл сразу, затем daemon loop; shutdown_event + pause_event для graceful control
+- `tests/test_ui.py` — 33 теста (7 QueueLogHandler + 26 MainWindow)
+- Все 278 тестов проходят
+
+**Follow-ups:**
+- Step 11: E2E + PyInstaller packaging

@@ -47,10 +47,25 @@ def main() -> None:
     if args.dry_run:
         config.kush.dry_run = True
 
+    # Determine mode
+    is_gui = not args.once and not args.daemon and not args.test_telegram
+
+    # For GUI mode, create window early so its log handler captures all messages
+    window = None
+    ui_handler = None
+    if is_gui:
+        from src.ui.main_window import MainWindow
+
+        window = MainWindow()
+        ui_handler = window.log_handler
+
     # Setup logging
-    logger = setup_logging(config.logging, config.files.logs_dir)
+    logger = setup_logging(config.logging, config.files.logs_dir, ui_handler=ui_handler)
     logger.info("parser_nb-bet starting...")
-    logger.info("  mode:    %s", "once" if args.once else "daemon" if args.daemon else "interactive")
+    logger.info(
+        "  mode:    %s",
+        "gui" if is_gui else "once" if args.once else "daemon" if args.daemon else "test-telegram",
+    )
     logger.info("  dry-run: %s", config.kush.dry_run)
 
     # Init state
@@ -123,7 +138,79 @@ def main() -> None:
         )
         scheduler.run_daemon(do_cycle)
     else:
-        logger.info("Starting GUI mode... (TODO step 10)")
+        # GUI mode — daemon loop in a worker thread, controlled via UI
+        import threading as _threading
+        import time as _time
+
+        shutdown_event = _threading.Event()
+        pause_event = _threading.Event()
+
+        scheduler = MskScheduler(
+            start_time_msk=config.schedule.start_time_msk,
+            interval_hours=config.schedule.interval_hours,
+            shutdown_event=shutdown_event,
+        )
+
+        cycle_count = 0
+
+        def on_start() -> None:
+            nonlocal cycle_count
+            # Run first cycle immediately
+            logger.info("Running first cycle...")
+            try:
+                do_cycle()
+            except Exception:
+                logger.exception("First cycle failed")
+            cycle_count += 1
+            window.update_stats(
+                cycles=cycle_count,
+                placed=state.placed_count,
+                pending=state.pending_count,
+            )
+
+            # Then enter scheduled daemon loop
+            logger.info("Entering scheduled daemon loop...")
+            while not shutdown_event.is_set():
+                # Pause check
+                while pause_event.is_set() and not shutdown_event.is_set():
+                    _time.sleep(1)
+                if shutdown_event.is_set():
+                    break
+                if not scheduler.wait_until_next():
+                    break
+                if shutdown_event.is_set() or pause_event.is_set():
+                    continue
+                logger.info("Scheduled cycle starting...")
+                try:
+                    do_cycle()
+                except Exception:
+                    logger.exception("Cycle failed")
+                cycle_count += 1
+                window.update_stats(
+                    cycles=cycle_count,
+                    placed=state.placed_count,
+                    pending=state.pending_count,
+                )
+                _time.sleep(2)
+            logger.info("Daemon stopped")
+
+        def on_pause() -> None:
+            if pause_event.is_set():
+                pause_event.clear()
+                logger.info("Resumed")
+            else:
+                pause_event.set()
+                logger.info("Paused")
+
+        def on_exit() -> None:
+            shutdown_event.set()
+
+        window._on_start = on_start
+        window._on_pause = on_pause
+        window._on_exit = on_exit
+
+        logger.info("GUI ready")
+        window.run()
 
     logger.info("Done")
 
