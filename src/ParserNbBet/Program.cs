@@ -1,4 +1,6 @@
+using System.Text.Json;
 using ParserNbBet.Config;
+using ParserNbBet.Decision;
 using ParserNbBet.Logging;
 using ParserNbBet.Nb;
 using ParserNbBet.State;
@@ -94,16 +96,54 @@ static class Program
         var matches = nbClient.GetMatchesAsync(windowDays, "soccer").GetAwaiter().GetResult();
         Log.Information("NB fetched: {Count} soccer matches over {Days} days", matches.Count, windowDays);
 
-        // Show first 3 as examples
-        foreach (var m in matches.Take(3))
-        {
-            Log.Information("  Example: {Match}", m);
-        }
+        // League filter
+        var leagueSettings = LoadLeagues(config);
+        var leagueRenames = LoadLeagueRenames();
+        var filter = new LeagueFilter(leagueSettings, leagueRenames);
+        var filtered = filter.Filter(matches);
+        Log.Information("After league filter: {Count}/{Total}", filtered.Count, matches.Count);
 
-        // TODO step 06: league filter + decision engine
+        // Decision engine
+        int passCount = 0;
+        foreach (var (match, setting) in filtered)
+        {
+            var decision = DecisionEngine.Evaluate(match);
+            if (decision.AnyPasses)
+            {
+                passCount++;
+                var bets = string.Join(", ", decision.PassingBets.Select(d => d.BetType));
+                Log.Information("  PASS: {Match} -> bets: {Bets}", match, bets);
+            }
+        }
+        Log.Information("After decision: {PassCount}/{FilteredCount} matches pass", passCount, filtered.Count);
+
         // TODO step 08: kush matching
         // TODO step 12: scheduler integration
 
         Log.Information("Headless cycle complete.");
+    }
+
+    static List<LeagueSetting> LoadLeagues(AppConfig config)
+    {
+        var path = config.Files.LeaguesXlsxPath;
+        if (!File.Exists(path))
+        {
+            Log.Warning("leagues.xlsx not found at {Path}, skipping league filter (all matches pass)", path);
+            return [];
+        }
+        return LeagueLoader.Load(path);
+    }
+
+    static Dictionary<string, string>? LoadLeagueRenames()
+    {
+        var path = Path.Combine("assets", "data", "sl_chemps_zamen.json");
+        if (!File.Exists(path))
+        {
+            Log.Debug("sl_chemps_zamen.json not found, skipping league renames");
+            return null;
+        }
+
+        var json = File.ReadAllText(path);
+        return JsonSerializer.Deserialize<Dictionary<string, string>>(json);
     }
 }

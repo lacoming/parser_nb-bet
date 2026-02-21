@@ -10,7 +10,7 @@
 | 03 | Выбор финального стека и план сборки | ✅ DONE | 2026-02-21 |
 | 04 | Конфигурация, логирование, хранение состояния | ✅ DONE | 2026-02-21 |
 | 05 | Парсер nb-bet Results (MVP) | ✅ DONE | 2026-02-21 |
-| 06 | Фильтр по лигам + бизнес-условия ставок | ⬜ TODO | — |
+| 06 | Фильтр по лигам + бизнес-условия ставок | ✅ DONE | 2026-02-21 |
 | 07 | Matcher NB ↔ Kush | ⬜ TODO | — |
 | 08 | KushClient (поиск события) + очередь ожидания | ⬜ TODO | — |
 | 09 | Автоставка на Куш + dry-run | ⬜ TODO | — |
@@ -169,3 +169,37 @@
 **Follow-ups:**
 - Шаг 06: LeagueLoader + LeagueFilter + DecisionEngine
 - Шаг 08: KushClient использует тот же HttpClient-подход с proxy
+
+---
+
+## Шаг 06 — DONE (2026-02-21)
+**Задача:** Парсер leagues.xlsx + LeagueFilter + DecisionEngine по правилам ТЗ.
+
+**Сделано:**
+- `Decision/LeagueSetting.cs` — модель стратегии: Sport, Leagues[], MinKf, MaxKf, BetTypeNb, BetTypeKush, IsInverse
+- `Decision/LeagueLoader.cs` — чтение leagues.xlsx через ClosedXML:
+  - Формат: A=Спорт, B=Лига, C=МинКф, D=МаксКф, E=Ставка_НБ, F=Ставка_Куш
+  - Группировка по стратегиям (новый спорт = новая группа)
+  - Поддержка запятой и точки как десятичного разделителя
+- `Decision/LeagueFilter.cs` — фильтрация матчей по загруженным лигам:
+  - Использует словарь замен лиг sl_chemps_zamen.json (NB→Kush нормализация)
+  - Case-insensitive сравнение
+  - Возвращает пары (Match, LeagueSetting) для дальнейшей обработки
+- `Decision/BetDecision.cs` — модели: BetDecision (тип, passes, reasons) + MatchDecision (агрегация)
+- `Decision/DecisionEngine.cs` — правила ставок из ТЗ:
+  - kf1 > kf2: 1X(kf1≤8, kf1X≥1.5, kf2≥1.4), 1(kf1≤8, kf2≥1.4), 2(kf2≥1.5), X(same as 1X)
+  - kf2 > kf1: 2(kf2≤8, kf1≥1.4), 1(kf1≥1.5)
+  - kf1 == kf2: skip (no clear favourite)
+  - Null odds: skip
+  - Reasons с invariant culture formatting
+- `Program.cs` — RunHeadless обновлён: NB → LeagueFilter → DecisionEngine, логи counts
+- 17 тестов DecisionEngineTests: null odds, equal odds, home fav all pass, kf1>8, kf1X<1.5, kfX null, kf2<1.5, kf2<1.4, boundary values, away fav all pass, kf2>8, kf1<1.5, kf1<1.4, boundary, reasons
+- 6 тестов LeagueFilterTests: matching, no match, case insensitive, rename dict, attaches setting, normalize
+
+**Проверки:**
+- `dotnet build --configuration Release` ✅ (0 ошибок, 0 предупреждений)
+- `dotnet test` ✅ (52/52 passed: 29 old + 17 decision + 6 filter)
+
+**Follow-ups:**
+- Шаг 07: Matcher NB ↔ Kush (FuzzySharp + sl_chemps_zamen.json)
+- Шаг 08: KushClient + pending queue
