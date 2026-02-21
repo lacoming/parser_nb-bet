@@ -7,14 +7,16 @@ public sealed record CliArgs(
     bool Once,
     bool Daemon,
     bool DryRun,
+    bool TestTelegram,
     string ConfigPath
 )
 {
     public static CliArgs Parse(string[] args)
     {
-        bool once   = args.Contains("--once",   StringComparer.OrdinalIgnoreCase);
-        bool daemon = args.Contains("--daemon", StringComparer.OrdinalIgnoreCase);
-        bool dryRun = args.Contains("--dry-run",StringComparer.OrdinalIgnoreCase);
+        bool once         = args.Contains("--once",          StringComparer.OrdinalIgnoreCase);
+        bool daemon       = args.Contains("--daemon",        StringComparer.OrdinalIgnoreCase);
+        bool dryRun       = args.Contains("--dry-run",       StringComparer.OrdinalIgnoreCase);
+        bool testTelegram = args.Contains("--test-telegram", StringComparer.OrdinalIgnoreCase);
 
         string configPath = "config.json";
         for (int i = 0; i < args.Length - 1; i++)
@@ -26,6 +28,6 @@ public sealed record CliArgs(
             }
         }
 
-        return new CliArgs(once, daemon, dryRun, configPath);
+        return new CliArgs(once, daemon, dryRun, testTelegram, configPath);
     }
 }

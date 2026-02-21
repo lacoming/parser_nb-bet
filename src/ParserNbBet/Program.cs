@@ -5,6 +5,7 @@ using ParserNbBet.Kush;
 using ParserNbBet.Logging;
 using ParserNbBet.Nb;
 using ParserNbBet.State;
+using ParserNbBet.Telegram;
 using ParserNbBet.Ui;
 using Serilog;
 
@@ -90,6 +91,20 @@ static class Program
     {
         Log.Information("Headless cycle starting...");
 
+        using var telegram = new TelegramNotifier(config.Telegram);
+        if (telegram.IsConfigured)
+            Log.Information("  telegram: configured ({Count} chats)", config.Telegram.ChatIds.Count);
+        else
+            Log.Information("  telegram: not configured (skipping notifications)");
+
+        // Handle --test-telegram
+        if (args.TestTelegram)
+        {
+            var ok = telegram.SendTestAsync().GetAwaiter().GetResult();
+            Log.Information("Telegram test: {Result}", ok ? "sent" : "failed");
+            return;
+        }
+
         using var nbClient = new NbClient(config.Nb, config.Proxies);
         var windowDays = config.Schedule.WindowDays;
 
@@ -120,20 +135,26 @@ static class Program
             passingMatches.Count, filtered.Count);
 
         // Kush matching + pending queue
-        RunKushMatching(config, state, passingMatches);
+        var (matched, placed, pending) = RunKushMatching(config, state, telegram, passingMatches);
 
         // Process pending queue (re-check previously queued matches)
-        ProcessPendingQueue(config, state);
+        ProcessPendingQueue(config, state, telegram);
+
+        // Cycle summary notification
+        telegram.NotifyCycleSummaryAsync(
+            matches.Count, filtered.Count, passingMatches.Count,
+            matched, placed, pending, config.Kush.DryRun).GetAwaiter().GetResult();
 
         // TODO step 12: scheduler integration
 
         Log.Information("Headless cycle complete.");
     }
 
-    static void RunKushMatching(AppConfig config, StateStore state,
+    static (int matched, int placed, int pending) RunKushMatching(AppConfig config, StateStore state,
+        TelegramNotifier telegram,
         List<(Match Match, LeagueSetting Setting, MatchDecision Decision)> passingMatches)
     {
-        if (passingMatches.Count == 0) return;
+        if (passingMatches.Count == 0) return (0, 0, 0);
 
         Log.Information("Kush matching: checking {Count} passing matches...", passingMatches.Count);
 
@@ -175,7 +196,7 @@ static class Program
                             state.RecordBet(match.MatchKey, betResult.BetType,
                                 betResult.KushEventId, betResult.OddsNb, betResult.OddsKush,
                                 betResult.Stake, betResult.Ratio, betResult.DryRun);
-                            // TODO step 10: TelegramNotifier.NotifyPlaced()
+                            telegram.NotifyPlacedAsync(match, betResult).GetAwaiter().GetResult();
                             break; // One bet per match
                         }
                     }
@@ -192,7 +213,7 @@ static class Program
                     {
                         pending++;
                         Log.Information("  PENDING: {Match} — {Reason}", match, result.Reason);
-                        // TODO step 10: TelegramNotifier.NotifyMissing()
+                        telegram.NotifyMissingAsync(match, result.Reason).GetAwaiter().GetResult();
                     }
                     else
                     {
@@ -214,9 +235,10 @@ static class Program
 
         Log.Information("Kush matching done: {Matched} matched, {Placed} placed, {Pending} pending, {Skipped} skipped",
             matched, placed, pending, skipped);
+        return (matched, placed, pending);
     }
 
-    static void ProcessPendingQueue(AppConfig config, StateStore state)
+    static void ProcessPendingQueue(AppConfig config, StateStore state, TelegramNotifier telegram)
     {
         var duePending = state.GetDuePending();
         if (duePending.Count == 0)
@@ -271,7 +293,7 @@ static class Program
                             state.RecordBet(pm.MatchKey, betResult.BetType,
                                 betResult.KushEventId, betResult.OddsNb, betResult.OddsKush,
                                 betResult.Stake, betResult.Ratio, betResult.DryRun);
-                            // TODO step 10: TelegramNotifier.NotifyPlaced()
+                            telegram.NotifyPlacedAsync(tempMatch, betResult).GetAwaiter().GetResult();
                             break;
                         }
                     }

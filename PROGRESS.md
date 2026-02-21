@@ -14,7 +14,7 @@
 | 07 | Matcher NB ↔ Kush | ✅ DONE | 2026-02-21 |
 | 08 | KushClient (поиск события) + очередь ожидания | ✅ DONE | 2026-02-21 |
 | 09 | Автоставка на Куш + dry-run | ✅ DONE | 2026-02-21 |
-| 10 | Telegram уведомления | ⬜ TODO | — |
+| 10 | Telegram уведомления | ✅ DONE | 2026-02-21 |
 | 11 | Excel вывод по шаблону | ⬜ TODO | — |
 | 12 | Планировщик + режимы запуска | ⬜ TODO | — |
 | 13 | UI окно + трей UX | ⬜ TODO | — |
@@ -301,3 +301,36 @@
 **Follow-ups:**
 - Шаг 10: TelegramNotifier (NotifyPlaced, NotifyMissing, CriticalError)
 - Шаг 11: ExcelWriter (output results per bet)
+
+---
+
+## Шаг 10 — DONE (2026-02-21)
+**Задача:** Telegram уведомления через Bot API.
+
+**Сделано:**
+- `Telegram/TelegramNotifier.cs` — полноценный Telegram-нотификатор:
+  - `NotifyPlacedAsync(Match, BetResult)` — ставка/dry-run размещена
+  - `NotifyMissingAsync(Match, reason)` — матч не найден на Куше, добавлен в очередь
+  - `NotifyCriticalErrorAsync(context, Exception)` — критическая ошибка (в dev_chat_id если настроен)
+  - `NotifyCycleSummaryAsync(...)` — итоги цикла (counts)
+  - `SendTestAsync()` — тестовое сообщение для проверки конфигурации
+  - MarkdownV2 форматирование с Escape спецсимволов
+  - Rate-limiting через SemaphoreSlim (configurable через rate_limit_seconds)
+  - Fallback: при ошибке парсинга MarkdownV2 → повторная отправка plain text
+  - Отправка в несколько chat_ids
+  - InvariantCulture для чисел (не зависит от системной локали)
+- `CliArgs.cs` — добавлен флаг `--test-telegram`
+- `Program.cs` — интеграция:
+  - Все TODO step 10 заменены на реальные вызовы TelegramNotifier
+  - RunKushMatching возвращает (matched, placed, pending) для summary
+  - NotifyCycleSummaryAsync в конце каждого цикла
+  - `--test-telegram` отправляет тестовое сообщение и выходит
+- 16 тестов TelegramNotifierTests: Escape (4), FormatPlaced (2), FormatMissing (1), FormatCriticalError (1), FormatCycleSummary (2), IsConfigured (3), NotConfigured safety (1), CliArgs (2)
+
+**Проверки:**
+- `dotnet build --configuration Release` ✅ (0 ошибок, 0 предупреждений)
+- `dotnet test` ✅ (139/139 passed: 123 old + 16 new)
+
+**Follow-ups:**
+- Шаг 11: ExcelWriter (output results per bet)
+- Шаг 12: Scheduler + режимы запуска
