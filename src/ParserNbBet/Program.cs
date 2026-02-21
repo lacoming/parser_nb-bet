@@ -1,6 +1,7 @@
 using System.Text.Json;
 using ParserNbBet.Config;
 using ParserNbBet.Decision;
+using ParserNbBet.Excel;
 using ParserNbBet.Kush;
 using ParserNbBet.Logging;
 using ParserNbBet.Nb;
@@ -134,11 +135,19 @@ static class Program
         Log.Information("After decision: {PassCount}/{FilteredCount} matches pass",
             passingMatches.Count, filtered.Count);
 
+        // Excel writer
+        var excel = new ExcelWriter(config.Files.OutputDir);
+
         // Kush matching + pending queue
-        var (matched, placed, pending) = RunKushMatching(config, state, telegram, passingMatches);
+        var (matched, placed, pending) = RunKushMatching(config, state, telegram, excel, passingMatches);
 
         // Process pending queue (re-check previously queued matches)
-        ProcessPendingQueue(config, state, telegram);
+        ProcessPendingQueue(config, state, telegram, excel);
+
+        // Save Excel
+        var excelPath = excel.Save();
+        if (excelPath != null)
+            Log.Information("Excel saved: {Path} ({Rows} rows)", excelPath, excel.RowCount);
 
         // Cycle summary notification
         telegram.NotifyCycleSummaryAsync(
@@ -151,7 +160,7 @@ static class Program
     }
 
     static (int matched, int placed, int pending) RunKushMatching(AppConfig config, StateStore state,
-        TelegramNotifier telegram,
+        TelegramNotifier telegram, ExcelWriter excel,
         List<(Match Match, LeagueSetting Setting, MatchDecision Decision)> passingMatches)
     {
         if (passingMatches.Count == 0) return (0, 0, 0);
@@ -197,6 +206,7 @@ static class Program
                                 betResult.KushEventId, betResult.OddsNb, betResult.OddsKush,
                                 betResult.Stake, betResult.Ratio, betResult.DryRun);
                             telegram.NotifyPlacedAsync(match, betResult).GetAwaiter().GetResult();
+                            excel.AddRow(ExcelWriter.BuildRow(match, bet, betResult, result.KushEvent));
                             break; // One bet per match
                         }
                     }
@@ -214,6 +224,10 @@ static class Program
                         pending++;
                         Log.Information("  PENDING: {Match} — {Reason}", match, result.Reason);
                         telegram.NotifyMissingAsync(match, result.Reason).GetAwaiter().GetResult();
+                        // Write first passing bet to Excel as pending
+                        var firstBet = decision.PassingBets.FirstOrDefault();
+                        if (firstBet != null)
+                            excel.AddRow(ExcelWriter.BuildRow(match, firstBet, status: "pending"));
                     }
                     else
                     {
@@ -238,7 +252,7 @@ static class Program
         return (matched, placed, pending);
     }
 
-    static void ProcessPendingQueue(AppConfig config, StateStore state, TelegramNotifier telegram)
+    static void ProcessPendingQueue(AppConfig config, StateStore state, TelegramNotifier telegram, ExcelWriter excel)
     {
         var duePending = state.GetDuePending();
         if (duePending.Count == 0)
@@ -294,6 +308,7 @@ static class Program
                                 betResult.KushEventId, betResult.OddsNb, betResult.OddsKush,
                                 betResult.Stake, betResult.Ratio, betResult.DryRun);
                             telegram.NotifyPlacedAsync(tempMatch, betResult).GetAwaiter().GetResult();
+                            excel.AddRow(ExcelWriter.BuildRow(tempMatch, fakeBet, betResult, result.KushEvent));
                             break;
                         }
                     }

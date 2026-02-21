@@ -15,7 +15,7 @@
 | 08 | KushClient (поиск события) + очередь ожидания | ✅ DONE | 2026-02-21 |
 | 09 | Автоставка на Куш + dry-run | ✅ DONE | 2026-02-21 |
 | 10 | Telegram уведомления | ✅ DONE | 2026-02-21 |
-| 11 | Excel вывод по шаблону | ⬜ TODO | — |
+| 11 | Excel вывод по шаблону | ✅ DONE | 2026-02-21 |
 | 12 | Планировщик + режимы запуска | ⬜ TODO | — |
 | 13 | UI окно + трей UX | ⬜ TODO | — |
 | 14 | E2E прогон + упаковка в .exe | ⬜ TODO | — |
@@ -334,3 +334,34 @@
 **Follow-ups:**
 - Шаг 11: ExcelWriter (output results per bet)
 - Шаг 12: Scheduler + режимы запуска
+
+---
+
+## Шаг 11 — DONE (2026-02-21)
+**Задача:** ExcelWriter — вывод результатов в .xlsx по шаблону.
+
+**Сделано:**
+- `Excel/ExcelRow.cs` — модель строки: дата, время, спорт, лига, команды, коэфы (start/end), движение коэфов, тип ставки, кеш-матч, ratio, статус, сумма, ссылки
+- `Excel/IColumnMapper.cs` — интерфейс маппинга колонок (ColumnDef с header, width, extractor, numberFormat)
+- `Excel/DefaultColumnMapper.cs` — 24 колонки: дата/время/спорт/лига/команды, КФ1/X/2 (нач/кон), движение, решение, Куш, статус, ссылки
+- `Excel/ExcelWriter.cs` — ClosedXML writer:
+  - AddRow/AddRows — буфер строк
+  - Save(dateOverride?) — создание файла `{yyyy-MM-dd}_results.xlsx` или append к существующему
+  - WriteHeaders — жирные заголовки, Times New Roman, border, wrap
+  - WriteRows — числовые значения записываются как double (не строка)
+  - ApplyFormatting — number formats, Table Style Medium 3
+  - BuildRow(Match, BetDecision?, BetResult?, KushEvent?) — хелпер для создания ExcelRow из доменных моделей, UTC→MSK конвертация
+- `Program.cs` — интеграция:
+  - ExcelWriter создаётся в RunHeadless
+  - Строки добавляются при: bet placed/dry-run, pending enqueue, resolved pending
+  - Save() в конце цикла
+- 13 тестов ExcelWriterTests: создание файла, заголовки, данные, append, RowCount, DefaultColumnMapper (24 cols), OddsMovement (calc, null, zero), BuildRow (match+decision, betResult, dryRun), числовые значения
+- ClosedXML graphic engine fix: `DefaultGraphicEngine.CreateOnlyWithFonts(arial.ttf)` для обхода проблем с доступом к C:\Windows\Fonts
+
+**Проверки:**
+- `dotnet build --configuration Release` ✅ (0 ошибок, 0 предупреждений)
+- `dotnet test` ✅ (152/152 passed: 139 old + 13 new)
+
+**Follow-ups:**
+- Шаг 12: Scheduler + режимы запуска (--once / --daemon)
+- Шаг 13: UI окно + трей UX
