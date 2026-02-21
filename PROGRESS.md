@@ -15,9 +15,9 @@ C# код остаётся в ветке `main`/`master` как бэкап.
 | 00 | Git setup + переписать docs | ✅ DONE | 2026-02-21 |
 | 01 | Скелет + config + logging | ✅ DONE | 2026-02-21 |
 | 02 | NB-Bet парсер (JSON API) | ✅ DONE | 2026-02-21 |
-| 03 | Фильтр лиг + DecisionEngine | ⬜ TODO | — |
-| 04 | Matcher NB ↔ Kush | ⬜ TODO | — |
-| 05 | Kush client (session, events, odds) | ⬜ TODO | — |
+| 03 | Фильтр лиг + DecisionEngine | ✅ DONE | 2026-02-21 |
+| 04 | Matcher NB ↔ Kush | ✅ DONE | 2026-02-21 |
+| 05 | Kush client (session, events, odds) | ✅ DONE | 2026-02-21 |
 | 06 | Kush bet placer + dry-run | ⬜ TODO | — |
 | 07 | Telegram уведомления | ⬜ TODO | — |
 | 08 | Excel writer | ⬜ TODO | — |
@@ -78,3 +78,37 @@ C# код остаётся в ветке `main`/`master` как бэкап.
 
 **Follow-ups:**
 - Step 03: League filter + DecisionEngine
+
+## Шаг 03 — DONE (2026-02-21)
+**Задача:** Фильтр лиг + DecisionEngine.
+
+**Сделано:**
+- `src/decision/models.py` — LeagueSetting, BetDecision dataclasses
+- `src/decision/league_loader.py` — openpyxl чтение leagues.xlsx
+- `src/decision/league_filter.py` — LeagueFilter + sl_chemps_zamen.json маппинг
+- `src/decision/engine.py` — DecisionEngine: правила ставок из ТЗ
+- `tests/test_decision.py` — 31 тест
+- Коммит: `feaab08`
+
+## Шаг 04 — DONE (2026-02-21)
+**Задача:** Matcher NB ↔ Kush.
+
+**Сделано:**
+- `src/kush/models.py` — KushEvent, MatchResult dataclasses
+- `src/kush/normalizer.py` — нормализация: lower → transliterate ru→en → remove punct → FC/FK
+- `src/kush/matcher.py` — EventMatcher: rapidfuzz WRatio, time tolerance, confidence
+- `tests/test_normalizer.py` — 15 тестов
+- `tests/test_matcher.py` — 16 тестов
+- Коммит: `aa7b53a`
+
+## Шаг 05 — DONE (2026-02-21)
+**Задача:** Kush client (session, leagues, events, odds).
+
+**Сделано:**
+- `src/kush/session.py` — KushSession: requests.Session + CSRF chain + login + rate-limiting + retry
+- `src/kush/client.py` — KushClient: get_leagues, get_events, get_all_events, get_odds, find_odds_entry
+- `tests/test_kush_client.py` — 33 теста (HTML parsing, session mock, client integration)
+- Все 151 тестов проходят
+
+**Follow-ups:**
+- Step 06: Kush bet placer + dry-run
