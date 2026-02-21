@@ -33,8 +33,8 @@
   },
   "kush": {
     "base_url": "https://kushvsporte.ru/",
-    "login": "YOUR_LOGIN_HERE",
-    "password": "YOUR_PASSWORD_HERE",
+    "login": "YOUR_LOGIN",
+    "password": "YOUR_PASSWORD",
     "dry_run": true,
     "default_stake": 100,
     "match_time_tolerance_hours": 2,

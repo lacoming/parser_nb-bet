@@ -145,7 +145,8 @@ class KushSession:
         )
 
         # Check for error in response
-        if resp.status_code == 200:
+        # 302 = redirect after successful login; 200 = page rendered directly
+        if resp.status_code in (200, 302):
             text_lower = resp.text.lower()
             if "неправильный логин или пароль" in text_lower:
                 raise KushSessionError("Invalid username or password")
@@ -201,7 +202,11 @@ class KushSession:
             try:
                 resp = self._session.post(
                     url, data=data, headers=headers, timeout=self._timeout,
+                    allow_redirects=False,
                 )
+                # Allow 2xx and 3xx (redirects from login, etc.)
+                if resp.status_code < 400:
+                    return resp
                 resp.raise_for_status()
                 return resp
             except requests.RequestException as exc:
