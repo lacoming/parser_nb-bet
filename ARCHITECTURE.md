@@ -81,13 +81,19 @@ parser_nb-bet/
   - Точные пороги — из ТЗ, зафиксируем в шаге 06.
 - **Namespace:** `ParserNbBet.Decision`
 
-### Matcher (`Kush/`)
+### EventMatcher (`Kush/EventMatcher.cs`)
 - **Назначение:** Сопоставить матч NB с событием на Куше.
+- **Классы:**
+  - `TeamNormalizer` — статический: ToLower → транслитерация кириллица→латиница → remove diacritics → remove punctuation → collapse whitespace.
+  - `EventMatcher` — fuzzy match: `FindBestMatch(Match, IReadOnlyList<KushEvent>) → MatchResult`.
+  - `MatchResult` — результат: KushEvent?, NameScore, TimeScore, Confidence, IsAccepted, Reason.
+  - `KushEvent` — модель события Kush (EventId, League, Teams, StartTimeUtc, Odds, Url).
 - **Алгоритм:**
-  - Нормализация: ToLower, удаление пунктуации, транслитерация.
-  - Допуск по времени: ±2 часа (настраивается).
-  - Confidence score (Levenshtein/fuzzy по названиям команд).
-- **Порог:** < 0.80 → не ставим, только лог.
+  1. Время: `|nb_start - kush_start| ≤ tolerance` (default 2h). TimeScore = 1 - diff/tolerance.
+  2. Имена: FuzzySharp `Fuzz.WeightedRatio` (WRatio) на нормализованных строках. Проверяет и прямой, и swap порядок команд.
+  3. `NameScore = max(normal, swapped)`.
+  4. `Confidence = nameScore * 0.70 + timeScore * 0.30`.
+- **Порог:** < 0.80 (настраивается через `KushConfig.MinConfidence`) → не ставим, только лог.
 - **Namespace:** `ParserNbBet.Kush`
 
 ### KushClient (`Kush/`)

@@ -11,7 +11,7 @@
 | 04 | Конфигурация, логирование, хранение состояния | ✅ DONE | 2026-02-21 |
 | 05 | Парсер nb-bet Results (MVP) | ✅ DONE | 2026-02-21 |
 | 06 | Фильтр по лигам + бизнес-условия ставок | ✅ DONE | 2026-02-21 |
-| 07 | Matcher NB ↔ Kush | ⬜ TODO | — |
+| 07 | Matcher NB ↔ Kush | ✅ DONE | 2026-02-21 |
 | 08 | KushClient (поиск события) + очередь ожидания | ⬜ TODO | — |
 | 09 | Автоставка на Куш + dry-run | ⬜ TODO | — |
 | 10 | Telegram уведомления | ⬜ TODO | — |
@@ -203,3 +203,32 @@
 **Follow-ups:**
 - Шаг 07: Matcher NB ↔ Kush (FuzzySharp + sl_chemps_zamen.json)
 - Шаг 08: KushClient + pending queue
+
+---
+
+## Шаг 07 — DONE (2026-02-21)
+**Задача:** Matcher NB ↔ Kush — сопоставление событий.
+
+**Сделано:**
+- `Kush/KushEvent.cs` — модель события Kush (EventId, League, Teams, StartTimeUtc, Odds dict, Url)
+- `Kush/TeamNormalizer.cs` — нормализация имён команд:
+  - ToLower → транслитерация кириллица→латиница → remove diacritics → remove punctuation → collapse whitespace
+  - Генерированные Regex (source-generated) для производительности
+- `Kush/EventMatcher.cs` — fuzzy matching NB ↔ Kush:
+  - FuzzySharp `Fuzz.WeightedRatio` (WRatio) — порт RapidFuzz из legacy Python
+  - Проверяет оба порядка (normal + swapped home/away)
+  - TimeScore: линейный decay от 1.0 (exact) до 0.0 (на границе tolerance)
+  - Confidence = nameScore * 0.70 + timeScore * 0.30
+  - Configurable: tolerance hours, min confidence (из KushConfig)
+- `Kush/MatchResult.cs` — результат матчинга: KushEvent?, NameScore, TimeScore, Confidence, IsAccepted, Reason
+- ARCHITECTURE.md обновлён: детали алгоритма матчинга
+- 10 тестов TeamNormalizerTests: lowercase, punctuation, whitespace, cyrillic, diacritics, mixed, edge cases
+- 17 тестов EventMatcherTests: exact match, fuzzy names, cyrillic↔latin, swapped teams, time tolerance, confidence formula, threshold, best match selection, edge cases
+
+**Проверки:**
+- `dotnet build --configuration Release` ✅ (0 ошибок, 0 предупреждений)
+- `dotnet test` ✅ (79/79 passed: 52 old + 10 normalizer + 17 matcher)
+
+**Follow-ups:**
+- Шаг 08: KushClient (HTTP, CSRF chain, поиск события) + pending queue
+- Шаг 09: KushBetPlacer (авторизация, ratio check, dry-run)
