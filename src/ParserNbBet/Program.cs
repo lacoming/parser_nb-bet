@@ -44,13 +44,76 @@ static class Program
         if (parsed.DryRun)
             config.Kush.DryRun = true;
 
-        // Initialize logging
+        // Determine if we need UI log sink
+        bool isUiMode = !parsed.Once && !parsed.Daemon && !parsed.TestTelegram;
+        MainForm? mainForm = null;
+        UiLogSink? uiSink = null;
+
+        if (isUiMode)
+        {
+            // Pre-create MainForm so the UiLogSink can reference it.
+            // WinForms initialization must happen before Application.Run.
+            Application.EnableVisualStyles();
+            Application.SetCompatibleTextRenderingDefault(false);
+            Application.SetHighDpiMode(HighDpiMode.SystemAware);
+
+            // We'll create the form after state/telegram init, but set up the sink callback first.
+            // Use a buffer that the form will drain once created.
+            var logBuffer = new System.Collections.Concurrent.ConcurrentQueue<string>();
+            uiSink = new UiLogSink(line => logBuffer.Enqueue(line));
+
+            LoggingSetup.Initialize(config, uiSink);
+
+            try
+            {
+                Log.Information("parser_nb-bet starting...");
+                Log.Information("  mode:     ui");
+                Log.Information("  dry-run:  {DryRun}", config.Kush.DryRun);
+                Log.Information("  config:   {ConfigPath}", parsed.ConfigPath);
+
+                using var state = new StateStore();
+                Log.Information("  state:    ok (pending={PendingCount})", state.PendingCount());
+                Log.Information("boot ok");
+
+                using var telegram = new TelegramNotifier(config.Telegram);
+                if (telegram.IsConfigured)
+                    Log.Information("  telegram: configured ({Count} chats)", config.Telegram.ChatIds.Count);
+                else
+                    Log.Information("  telegram: not configured");
+
+                var runner = new CycleRunner(config, state, telegram);
+                mainForm = new MainForm(parsed, config, runner);
+
+                // Rewire sink to write directly to form + drain buffer
+                uiSink = new UiLogSink(line => mainForm.AppendLog(line));
+                LoggingSetup.Initialize(config, uiSink);
+
+                // Drain buffered lines
+                while (logBuffer.TryDequeue(out var buffered))
+                    mainForm.AppendLog(buffered);
+
+                Application.Run(mainForm);
+            }
+            catch (Exception ex)
+            {
+                Log.Fatal(ex, "Unhandled exception");
+                throw;
+            }
+            finally
+            {
+                Log.CloseAndFlush();
+            }
+
+            return;
+        }
+
+        // Headless modes: initialize logging without UI sink
         LoggingSetup.Initialize(config);
 
         try
         {
             Log.Information("parser_nb-bet starting...");
-            Log.Information("  mode:     {Mode}", parsed.Once ? "once" : parsed.Daemon ? "daemon" : "ui");
+            Log.Information("  mode:     {Mode}", parsed.Once ? "once" : parsed.TestTelegram ? "test-telegram" : "daemon");
             Log.Information("  dry-run:  {DryRun}", config.Kush.DryRun);
             Log.Information("  config:   {ConfigPath}", parsed.ConfigPath);
 
@@ -92,13 +155,6 @@ static class Program
                 RunHeadlessDaemon(config, runner);
                 return;
             }
-
-            // ── Default: WinForms UI + daemon in background ────────────────────
-            Application.EnableVisualStyles();
-            Application.SetCompatibleTextRenderingDefault(false);
-            Application.SetHighDpiMode(HighDpiMode.SystemAware);
-
-            Application.Run(new MainForm(parsed, config, runner));
         }
         catch (Exception ex)
         {

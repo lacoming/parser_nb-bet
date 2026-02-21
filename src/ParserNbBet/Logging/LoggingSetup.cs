@@ -10,7 +10,7 @@ public static class LoggingSetup
     /// Configure Serilog with file sink (rotation) + console sink.
     /// Call once at application startup. Sets <see cref="Log.Logger"/>.
     /// </summary>
-    public static void Initialize(AppConfig config)
+    public static void Initialize(AppConfig config, UiLogSink? uiSink = null)
     {
         var logsDir = config.Files.LogsDir;
         Directory.CreateDirectory(logsDir);
@@ -19,7 +19,7 @@ public static class LoggingSetup
 
         var level = ParseLevel(config.Logging.Level);
 
-        Log.Logger = new LoggerConfiguration()
+        var loggerConfig = new LoggerConfiguration()
             .MinimumLevel.Is(level)
             .WriteTo.Console(
                 outputTemplate: config.Logging.OutputTemplate)
@@ -30,8 +30,12 @@ public static class LoggingSetup
                 retainedFileCountLimit: config.Logging.RetainedFileCount,
                 rollOnFileSizeLimit: true,
                 shared: false)
-            .Enrich.FromLogContext()
-            .CreateLogger();
+            .Enrich.FromLogContext();
+
+        if (uiSink != null)
+            loggerConfig = loggerConfig.WriteTo.Sink(uiSink);
+
+        Log.Logger = loggerConfig.CreateLogger();
     }
 
     private static LogEventLevel ParseLevel(string level)

@@ -10,7 +10,7 @@ namespace ParserNbBet.Ui;
 ///   - On start: window is visible.
 ///   - "Hide" button / menu → hide to tray.
 ///   - X (FormClosing) → dialog "Exit or Minimize?".
-///   - Tray right-click: "Open window", "Exit".
+///   - Tray right-click: "Open window", "Run now", "Pause/Resume", "Open logs", "Exit".
 /// </summary>
 public sealed class MainForm : Form
 {
@@ -23,6 +23,7 @@ public sealed class MainForm : Form
     private MskScheduler? _scheduler;
     private CancellationTokenSource? _cts;
     private Task? _daemonTask;
+    private volatile bool _isPaused;
 
     public MainForm(CliArgs args, AppConfig config, CycleRunner runner)
     {
@@ -33,87 +34,145 @@ public sealed class MainForm : Form
         InitializeTray();
     }
 
-    // ── UI layout ────────────────────────────────────────────────────────────
+    // ── UI controls ─────────────────────────────────────────────────────────
 
-    private Label _lblStatus = null!;
-    private Button _btnHide  = null!;
-    private Button _btnExit  = null!;
+    private Label _lblTitle = null!;
+    private Label _lblNextRun = null!;
+    private Label _lblLastResult = null!;
+    private TextBox _txtLog = null!;
     private Button _btnRunNow = null!;
+    private Button _btnPause = null!;
+    private Button _btnHide = null!;
+    private Button _btnExit = null!;
+
+    // ── Tray menu items (to update text) ────────────────────────────────────
+    private ToolStripMenuItem _trayPause = null!;
 
     private void InitializeComponent()
     {
-        Text            = "parser_nb-bet";
-        Size            = new Size(420, 300);
-        MinimumSize     = new Size(420, 300);
-        StartPosition   = FormStartPosition.CenterScreen;
-        FormBorderStyle = FormBorderStyle.FixedSingle;
-        MaximizeBox     = false;
+        Text = "parser_nb-bet";
+        Size = new Size(600, 520);
+        MinimumSize = new Size(500, 420);
+        StartPosition = FormStartPosition.CenterScreen;
+        MaximizeBox = false;
+        Font = new Font("Segoe UI", 9f);
 
-        _lblStatus = new Label
+        // ── Status panel (top) ──────────────────────────────────────────────
+
+        var statusPanel = new Panel
         {
-            Text      = "Статус: инициализация…",
-            Dock      = DockStyle.Top,
-            Height    = 180,
-            Padding   = new Padding(12),
-            Font      = new Font("Segoe UI", 9f),
-            TextAlign = ContentAlignment.TopLeft,
+            Dock = DockStyle.Top,
+            Height = 80,
+            Padding = new Padding(12, 8, 12, 4),
         };
 
-        _btnRunNow = new Button
+        _lblTitle = new Label
         {
-            Text   = "Запустить сейчас",
-            Width  = 150,
-            Height = 32,
-            Left   = 12,
-            Top    = 200,
-            Anchor = AnchorStyles.Bottom | AnchorStyles.Left,
+            Text = "parser_nb-bet",
+            Font = new Font("Segoe UI", 12f, FontStyle.Bold),
+            AutoSize = true,
+            Left = 12,
+            Top = 8,
         };
+
+        _lblNextRun = new Label
+        {
+            Text = "Статус: инициализация…",
+            AutoSize = true,
+            Left = 12,
+            Top = 34,
+            ForeColor = Color.FromArgb(60, 60, 60),
+        };
+
+        _lblLastResult = new Label
+        {
+            Text = "",
+            AutoSize = true,
+            Left = 12,
+            Top = 54,
+            ForeColor = Color.FromArgb(80, 80, 80),
+        };
+
+        statusPanel.Controls.AddRange([_lblTitle, _lblNextRun, _lblLastResult]);
+
+        // ── Log viewer (center) ─────────────────────────────────────────────
+
+        _txtLog = new TextBox
+        {
+            Multiline = true,
+            ReadOnly = true,
+            ScrollBars = ScrollBars.Vertical,
+            Dock = DockStyle.Fill,
+            BackColor = Color.FromArgb(20, 20, 20),
+            ForeColor = Color.FromArgb(200, 200, 200),
+            Font = new Font("Consolas", 8.5f),
+            WordWrap = false,
+        };
+
+        // ── Button panel (bottom) ───────────────────────────────────────────
+
+        var buttonPanel = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Bottom,
+            Height = 44,
+            Padding = new Padding(8, 6, 8, 6),
+            FlowDirection = FlowDirection.LeftToRight,
+        };
+
+        _btnRunNow = new Button { Text = "Запустить", Width = 100, Height = 30 };
         _btnRunNow.Click += OnRunNowClick;
 
-        _btnHide = new Button
-        {
-            Text   = "Скрыть в трей",
-            Width  = 130,
-            Height = 32,
-            Left   = 170,
-            Top    = 200,
-            Anchor = AnchorStyles.Bottom | AnchorStyles.Left,
-        };
+        _btnPause = new Button { Text = "Пауза", Width = 80, Height = 30 };
+        _btnPause.Click += OnPauseClick;
+
+        _btnHide = new Button { Text = "Скрыть в трей", Width = 110, Height = 30 };
         _btnHide.Click += (_, _) => HideToTray();
 
-        _btnExit = new Button
-        {
-            Text   = "Выход",
-            Width  = 90,
-            Height = 32,
-            Left   = 308,
-            Top    = 200,
-            Anchor = AnchorStyles.Bottom | AnchorStyles.Left,
-        };
+        _btnExit = new Button { Text = "Выход", Width = 80, Height = 30 };
         _btnExit.Click += (_, _) => ForceExit();
 
-        Controls.AddRange(new Control[] { _lblStatus, _btnRunNow, _btnHide, _btnExit });
+        buttonPanel.Controls.AddRange([_btnRunNow, _btnPause, _btnHide, _btnExit]);
+
+        // ── Separator ───────────────────────────────────────────────────────
+
+        var sep = new Panel
+        {
+            Dock = DockStyle.Top,
+            Height = 1,
+            BackColor = Color.FromArgb(200, 200, 200),
+        };
+
+        // ── Assemble ────────────────────────────────────────────────────────
+
+        Controls.Add(_txtLog);       // Fill (center)
+        Controls.Add(sep);           // Top separator under status
+        Controls.Add(statusPanel);   // Top
+        Controls.Add(buttonPanel);   // Bottom
 
         FormClosing += OnFormClosing;
         Load += OnFormLoad;
     }
 
-    // ── Tray ─────────────────────────────────────────────────────────────────
+    // ── Tray ────────────────────────────────────────────────────────────────
 
     private void InitializeTray()
     {
         var menu = new ContextMenuStrip();
         menu.Items.Add("Открыть окно", null, (_, _) => ShowWindow());
         menu.Items.Add("Запустить сейчас", null, (_, _) => OnRunNowClick(this, EventArgs.Empty));
+        _trayPause = new ToolStripMenuItem("Пауза", null, (_, _) => OnPauseClick(this, EventArgs.Empty));
+        menu.Items.Add(_trayPause);
         menu.Items.Add(new ToolStripSeparator());
-        menu.Items.Add("Выход",        null, (_, _) => ForceExit());
+        menu.Items.Add("Открыть логи", null, (_, _) => OpenLogsFolder());
+        menu.Items.Add(new ToolStripSeparator());
+        menu.Items.Add("Выход", null, (_, _) => ForceExit());
 
         _tray = new NotifyIcon
         {
-            Text             = "parser_nb-bet",
-            Icon             = LoadIcon(),
+            Text = "parser_nb-bet",
+            Icon = LoadIcon(),
             ContextMenuStrip = menu,
-            Visible          = false,
+            Visible = false,
         };
         _tray.DoubleClick += (_, _) => ShowWindow();
     }
@@ -124,7 +183,44 @@ public sealed class MainForm : Form
         return File.Exists(path) ? new Icon(path) : SystemIcons.Application;
     }
 
-    // ── Lifecycle ─────────────────────────────────────────────────────────────
+    // ── Public: append log line (called from UiLogSink via any thread) ──────
+
+    private const int MaxLogLines = 500;
+
+    public void AppendLog(string line)
+    {
+        if (IsDisposed) return;
+
+        if (InvokeRequired)
+        {
+            try { BeginInvoke(() => AppendLogInternal(line)); }
+            catch (ObjectDisposedException) { }
+            catch (InvalidOperationException) { }
+        }
+        else
+        {
+            AppendLogInternal(line);
+        }
+    }
+
+    private void AppendLogInternal(string line)
+    {
+        if (_txtLog.IsDisposed) return;
+
+        _txtLog.AppendText(line + Environment.NewLine);
+
+        // Trim if too many lines
+        if (_txtLog.Lines.Length > MaxLogLines)
+        {
+            var lines = _txtLog.Lines;
+            var trimmed = lines.Skip(lines.Length - MaxLogLines + 100).ToArray();
+            _txtLog.Lines = trimmed;
+            _txtLog.SelectionStart = _txtLog.TextLength;
+            _txtLog.ScrollToCaret();
+        }
+    }
+
+    // ── Lifecycle ───────────────────────────────────────────────────────────
 
     private void OnFormLoad(object? sender, EventArgs e)
     {
@@ -142,33 +238,19 @@ public sealed class MainForm : Form
             {
                 var msk = TimeZoneInfo.ConvertTimeFromUtc(nextUtc,
                     TimeZoneInfo.FindSystemTimeZoneById("Russian Standard Time"));
-                UpdateStatus($"Следующий запуск: {msk:yyyy-MM-dd HH:mm:ss} MSK");
+                UpdateNextRun($"Следующий запуск: {msk:dd.MM.yyyy HH:mm} MSK");
             };
 
             _scheduler.CycleStarted += () =>
             {
                 SetRunning(true);
-                UpdateStatus("Цикл выполняется...");
+                UpdateNextRun("Цикл выполняется…");
             };
 
             _scheduler.CycleFinished += ok =>
             {
                 SetRunning(false);
-                var result = _runner.LastResult;
-                if (result != null)
-                {
-                    var msk = TimeZoneInfo.ConvertTimeFromUtc(result.CompletedUtc,
-                        TimeZoneInfo.FindSystemTimeZoneById("Russian Standard Time"));
-                    UpdateStatus(
-                        $"Последний цикл: {msk:HH:mm:ss} MSK ({(ok ? "OK" : "ошибка")})\n" +
-                        $"  Матчей NB: {result.TotalMatches}\n" +
-                        $"  После фильтра: {result.FilteredMatches}\n" +
-                        $"  Прошли решение: {result.PassingMatches}\n" +
-                        $"  Совпало на Куше: {result.KushMatched}\n" +
-                        $"  Ставок: {result.BetsPlaced}\n" +
-                        $"  В очереди: {result.Pending}\n" +
-                        $"  dry-run: {_config.Kush.DryRun}");
-                }
+                ShowLastResult(ok);
             };
 
             _daemonTask = Task.Run(() => _scheduler.RunDaemonAsync(_cts.Token));
@@ -176,21 +258,23 @@ public sealed class MainForm : Form
         }
         else
         {
-            UpdateStatus("Планировщик отключён (schedule.enabled=false).\nИспользуйте кнопку 'Запустить сейчас'.");
+            UpdateNextRun("Планировщик отключён (schedule.enabled=false)");
+            _btnPause.Enabled = false;
         }
     }
 
-    // ── Actions ───────────────────────────────────────────────────────────────
+    // ── Actions ─────────────────────────────────────────────────────────────
 
     private volatile bool _isRunning;
 
     private void SetRunning(bool running)
     {
         _isRunning = running;
-        if (InvokeRequired)
-            Invoke(() => _btnRunNow.Enabled = !running);
-        else
+        SafeInvoke(() =>
+        {
             _btnRunNow.Enabled = !running;
+            _btnPause.Enabled = !running && _config.Schedule.Enabled;
+        });
     }
 
     private async void OnRunNowClick(object? sender, EventArgs e)
@@ -203,32 +287,66 @@ public sealed class MainForm : Form
         }
 
         SetRunning(true);
-        UpdateStatus("Ручной запуск цикла...");
+        UpdateNextRun("Ручной запуск цикла…");
 
         try
         {
             await Task.Run(() => _runner.RunAsync(CancellationToken.None));
-
-            var result = _runner.LastResult;
-            if (result != null)
-            {
-                var msk = TimeZoneInfo.ConvertTimeFromUtc(result.CompletedUtc,
-                    TimeZoneInfo.FindSystemTimeZoneById("Russian Standard Time"));
-                UpdateStatus(
-                    $"Ручной цикл завершён: {msk:HH:mm:ss} MSK\n" +
-                    $"  Матчей NB: {result.TotalMatches}\n" +
-                    $"  Ставок: {result.BetsPlaced}\n" +
-                    $"  В очереди: {result.Pending}");
-            }
+            ShowLastResult(true);
         }
         catch (Exception ex)
         {
             Log.Error(ex, "Manual cycle failed");
-            UpdateStatus($"Ошибка ручного запуска: {ex.Message}");
+            UpdateLastResult($"Ошибка: {ex.Message}");
         }
         finally
         {
             SetRunning(false);
+        }
+    }
+
+    private void OnPauseClick(object? sender, EventArgs e)
+    {
+        if (_scheduler == null) return;
+
+        if (!_isPaused)
+        {
+            _scheduler.Stop();
+            _isPaused = true;
+            _btnPause.Text = "Возобновить";
+            _trayPause.Text = "Возобновить";
+            UpdateNextRun("Планировщик приостановлен");
+            Log.Information("Scheduler paused by user");
+        }
+        else
+        {
+            // Restart daemon
+            _cts?.Dispose();
+            _cts = new CancellationTokenSource();
+            _scheduler = new MskScheduler(_config.Schedule, ct => _runner.RunAsync(ct));
+
+            _scheduler.NextRunComputed += nextUtc =>
+            {
+                var msk = TimeZoneInfo.ConvertTimeFromUtc(nextUtc,
+                    TimeZoneInfo.FindSystemTimeZoneById("Russian Standard Time"));
+                UpdateNextRun($"Следующий запуск: {msk:dd.MM.yyyy HH:mm} MSK");
+            };
+            _scheduler.CycleStarted += () =>
+            {
+                SetRunning(true);
+                UpdateNextRun("Цикл выполняется…");
+            };
+            _scheduler.CycleFinished += ok =>
+            {
+                SetRunning(false);
+                ShowLastResult(ok);
+            };
+
+            _daemonTask = Task.Run(() => _scheduler.RunDaemonAsync(_cts.Token));
+            _isPaused = false;
+            _btnPause.Text = "Пауза";
+            _trayPause.Text = "Пауза";
+            Log.Information("Scheduler resumed by user");
         }
     }
 
@@ -242,7 +360,7 @@ public sealed class MainForm : Form
     private void ShowWindow()
     {
         Show();
-        WindowState   = FormWindowState.Normal;
+        WindowState = FormWindowState.Normal;
         _tray.Visible = false;
         Activate();
     }
@@ -275,14 +393,63 @@ public sealed class MainForm : Form
             HideToTray();      // "Свернуть"
     }
 
-    // ── Public status update (called from scheduler thread) ───────────────────
-
-    public void UpdateStatus(string text)
+    private static void OpenLogsFolder()
     {
-        if (InvokeRequired)
-            Invoke(() => _lblStatus.Text = text);
+        var logsDir = Path.GetFullPath("logs");
+        if (Directory.Exists(logsDir))
+        {
+            System.Diagnostics.Process.Start("explorer.exe", logsDir);
+        }
         else
-            _lblStatus.Text = text;
+        {
+            MessageBox.Show($"Папка логов не найдена:\n{logsDir}", "parser_nb-bet",
+                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+    }
+
+    // ── Status updates (thread-safe) ────────────────────────────────────────
+
+    private void UpdateNextRun(string text)
+    {
+        SafeInvoke(() => _lblNextRun.Text = text);
+    }
+
+    private void UpdateLastResult(string text)
+    {
+        SafeInvoke(() => _lblLastResult.Text = text);
+    }
+
+    private void ShowLastResult(bool ok)
+    {
+        var result = _runner.LastResult;
+        if (result == null) return;
+
+        var msk = TimeZoneInfo.ConvertTimeFromUtc(result.CompletedUtc,
+            TimeZoneInfo.FindSystemTimeZoneById("Russian Standard Time"));
+
+        var status = ok ? "OK" : "ошибка";
+        var text = $"Последний цикл: {msk:HH:mm:ss} ({status}) | " +
+                   $"NB: {result.TotalMatches} → фильтр: {result.FilteredMatches} → " +
+                   $"решение: {result.PassingMatches} | Куш: {result.KushMatched} | " +
+                   $"Ставок: {result.BetsPlaced} | Очередь: {result.Pending}" +
+                   (_config.Kush.DryRun ? " [dry-run]" : "");
+
+        UpdateLastResult(text);
+    }
+
+    private void SafeInvoke(Action action)
+    {
+        if (IsDisposed) return;
+        if (InvokeRequired)
+        {
+            try { Invoke(action); }
+            catch (ObjectDisposedException) { }
+            catch (InvalidOperationException) { }
+        }
+        else
+        {
+            action();
+        }
     }
 
     protected override void Dispose(bool disposing)
