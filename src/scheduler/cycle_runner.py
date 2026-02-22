@@ -96,7 +96,10 @@ def run_cycle(
     for match in filtered:
         decisions = decision_engine.get_passing_decisions(match)
         if decisions:
-            passing.append((match, decisions))
+            # Find the league setting to get per-league ROI
+            setting = league_filter.find_setting(match)
+            league_roi = setting.roi if setting else 0.0
+            passing.append((match, decisions, league_roi))
     stats.decided = len(passing)
     log.info("Decision engine: %d matches with passing bets", stats.decided)
 
@@ -143,8 +146,9 @@ def run_cycle(
     )
 
     # 5. Match and place bets
-    for match, decisions in passing:
-        result = matcher.find_best_match(match, all_events)
+    for match, decisions, league_roi in passing:
+        kush_league = league_filter.get_kush_league(match.league)
+        result = matcher.find_best_match(match, all_events, kush_league_name=kush_league)
 
         if result is None:
             stats.missing += 1
@@ -175,6 +179,7 @@ def run_cycle(
                     bet_type_kush=decision.bet_type,
                     kf_nb=kf_nb,
                     dry_run=config.kush.dry_run,
+                    roi=league_roi,
                 )
                 if bet_result.success:
                     stats.placed += 1

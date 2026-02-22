@@ -70,11 +70,14 @@ a.datas = [(n, s, t) for n, s, t in a.datas if not _should_strip_data(n)]
 # Strip unnecessary native extensions to save space
 _strip_binaries = (
     'lxml\\sax', 'lxml\\builder', 'lxml/sax', 'lxml/builder',
+    'lxml\\html\\_difflib', 'lxml/html/_difflib',
     'rapidfuzz\\distance\\metrics_cpp_avx2', 'rapidfuzz/distance/metrics_cpp_avx2',
     'rapidfuzz\\distance\\metrics_cpp.', 'rapidfuzz/distance/metrics_cpp.',
     'rapidfuzz\\process_cpp_impl', 'rapidfuzz/process_cpp_impl',
     'rapidfuzz\\process_cpp.', 'rapidfuzz/process_cpp.',
     'rapidfuzz\\process_cpp_avx2', 'rapidfuzz/process_cpp_avx2',
+    'rapidfuzz\\fuzz_cpp_avx2', 'rapidfuzz/fuzz_cpp_avx2',
+    'rapidfuzz\\utils_cpp_avx2', 'rapidfuzz/utils_cpp_avx2',
     'rapidfuzz\\distance\\_initialize_cpp', 'rapidfuzz/distance/_initialize_cpp',
 )
 a.binaries = [

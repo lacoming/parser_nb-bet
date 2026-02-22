@@ -219,6 +219,64 @@ class TestLeagueSetting:
         assert s.check(100.0, 100.0)
 
 
+class TestLeagueSettingRoi:
+    def test_default_roi_zero(self):
+        s = LeagueSetting(bet_type="1")
+        assert s.roi == 0.0
+
+    def test_roi_set(self):
+        s = LeagueSetting(bet_type="1", roi=0.15)
+        assert s.roi == 0.15
+
+
+class TestParseRoi:
+    def test_integer_percentage(self):
+        from src.decision.league_loader import _parse_roi
+        assert abs(_parse_roi(15) - 0.15) < 0.001
+
+    def test_float_fraction(self):
+        from src.decision.league_loader import _parse_roi
+        assert abs(_parse_roi(0.15) - 0.15) < 0.001
+
+    def test_string_percentage(self):
+        from src.decision.league_loader import _parse_roi
+        assert abs(_parse_roi("15%") - 0.15) < 0.001
+
+    def test_string_number(self):
+        from src.decision.league_loader import _parse_roi
+        assert abs(_parse_roi("15") - 0.15) < 0.001
+
+    def test_string_fraction(self):
+        from src.decision.league_loader import _parse_roi
+        assert abs(_parse_roi("0.15") - 0.15) < 0.001
+
+    def test_comma_decimal(self):
+        from src.decision.league_loader import _parse_roi
+        assert abs(_parse_roi("15,5") - 0.155) < 0.001
+
+    def test_none(self):
+        from src.decision.league_loader import _parse_roi
+        assert _parse_roi(None) == 0.0
+
+    def test_empty_string(self):
+        from src.decision.league_loader import _parse_roi
+        assert _parse_roi("") == 0.0
+
+    def test_garbage(self):
+        from src.decision.league_loader import _parse_roi
+        assert _parse_roi("abc") == 0.0
+
+    def test_one_percent(self):
+        from src.decision.league_loader import _parse_roi
+        # 1 is treated as 1% = 0.01 (since > 1.0)
+        assert abs(_parse_roi(1.0) - 1.0) < 0.001
+
+    def test_exactly_one(self):
+        from src.decision.league_loader import _parse_roi
+        # 1.0 is NOT > 1.0, so treated as fraction
+        assert _parse_roi(1.0) == 1.0
+
+
 class TestNormalizeBetType:
     def test_pob1(self):
         assert normalize_bet_type("поб1") == "1"

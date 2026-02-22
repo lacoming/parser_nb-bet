@@ -1,9 +1,10 @@
 """League settings loader from leagues.xlsx (openpyxl).
 
-Expected Excel format (3 columns):
+Expected Excel format (4 columns):
   A: Вид ставки (bet type)   — marks start of a new strategy group
   B: Лиги (league name)      — one per row, inherits group from column A
   C: условие (condition text) — on the first row of the group
+  D: ROI % (e.g. 15 or 15%)  — ROI for ratio calculation, on first row of group
 
 Condition examples:
   "Кф1 > или = 1,5, Кф1 < Кф2"
@@ -72,6 +73,7 @@ def load_league_settings(path: str = "leagues.xlsx") -> list[LeagueSetting]:
         bet_type_cell = ws.cell(row=row, column=1).value
         league_cell = ws.cell(row=row, column=2).value
         condition_cell = ws.cell(row=row, column=3).value
+        roi_cell = ws.cell(row=row, column=4).value
 
         # New group starts when column A has a value
         if bet_type_cell is not None and str(bet_type_cell).strip():
@@ -82,9 +84,12 @@ def load_league_settings(path: str = "leagues.xlsx") -> list[LeagueSetting]:
             if condition_cell is not None and str(condition_cell).strip():
                 condition_raw = str(condition_cell).strip()
 
+            roi = _parse_roi(roi_cell)
+
             current = LeagueSetting(
                 bet_type=bet_type,
                 condition_raw=condition_raw,
+                roi=roi,
             )
             _apply_parsed_conditions(current, condition_raw)
             settings.append(current)
@@ -227,3 +232,31 @@ def _parse_number(text: str) -> Optional[float]:
         return float(text.replace(",", "."))
     except (ValueError, TypeError):
         return None
+
+
+def _parse_roi(cell_value: object) -> float:
+    """Parse ROI from Excel cell value.
+
+    Accepts:
+      - numeric: 15 → 0.15 (percentage), 0.15 → 0.15 (fraction)
+      - string: "15%", "15", "0.15"
+
+    Returns ROI as a fraction (e.g. 0.15 for 15%).
+    """
+    if cell_value is None:
+        return 0.0
+
+    if isinstance(cell_value, (int, float)):
+        val = float(cell_value)
+        # If > 1, treat as percentage (e.g. 15 → 0.15)
+        return val / 100.0 if val > 1.0 else val
+
+    text = str(cell_value).strip().replace(",", ".").replace("%", "")
+    if not text:
+        return 0.0
+    try:
+        val = float(text)
+        return val / 100.0 if val > 1.0 else val
+    except (ValueError, TypeError):
+        log.debug("Cannot parse ROI value: %r", cell_value)
+        return 0.0

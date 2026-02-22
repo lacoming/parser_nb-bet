@@ -183,3 +183,43 @@ class TestEventMatcher:
         )
         assert r.confidence == 0.85
         assert r.swapped is False
+
+    def test_league_prefilter_narrows_candidates(self):
+        """When kush_league_name is provided, only matching events are considered."""
+        matcher = EventMatcher()
+        nb = _nb_match()
+        good = _kush_event(event_id="good", league="Англия. Премьер-Лига")
+        bad = _kush_event(
+            event_id="bad",
+            league="Испания. Ла Лига",
+            team_home="Manchester United",
+            team_away="Liverpool",
+        )
+        result = matcher.find_best_match(nb, [bad, good], kush_league_name="Англия. Премьер-Лига")
+        assert result is not None
+        assert result.kush_event.event_id == "good"
+
+    def test_league_prefilter_fallback_to_all(self):
+        """When no events match the league, fall back to all events."""
+        matcher = EventMatcher()
+        nb = _nb_match()
+        kush = [_kush_event(event_id="123", league="Англия. Чемпионшип")]
+        result = matcher.find_best_match(nb, kush, kush_league_name="Несуществующая лига")
+        # Should still find the match via fallback
+        assert result is not None
+
+    def test_league_prefilter_none_uses_all(self):
+        """When kush_league_name is None, all events are searched."""
+        matcher = EventMatcher()
+        nb = _nb_match()
+        kush = [_kush_event()]
+        result = matcher.find_best_match(nb, kush, kush_league_name=None)
+        assert result is not None
+
+    def test_league_prefilter_partial_match(self):
+        """League name uses 'in' matching for flexibility."""
+        matcher = EventMatcher()
+        nb = _nb_match()
+        kush = [_kush_event(league="Англия. Премьер-Лига (осн.)")]
+        result = matcher.find_best_match(nb, kush, kush_league_name="Премьер-Лига")
+        assert result is not None

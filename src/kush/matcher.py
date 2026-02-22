@@ -1,15 +1,17 @@
 """Event matcher: matches NB-Bet matches to Kush events via fuzzy matching.
 
-Algorithm (from ARCHITECTURE.md):
-1. Normalize team names (lower, transliterate ru→en, remove punctuation)
-2. Fuzzy: rapidfuzz WRatio on normalized strings, check both team orders
-3. TimeScore: linear decay from 1.0 to 0.0 at tolerance boundary
-4. Confidence = nameScore * 0.70 + timeScore * 0.30
-5. Threshold: >= 0.80 → accepted
+Algorithm:
+1. Pre-filter Kush events by league (via sl_chemps_zamen mapping)
+2. Normalize team names (lower, transliterate ru→en, remove punctuation)
+3. Fuzzy: rapidfuzz WRatio on normalized strings, check both team orders
+4. TimeScore: linear decay from 1.0 to 0.0 at tolerance boundary
+5. Confidence = nameScore * 0.70 + timeScore * 0.30
+6. Threshold: >= 0.80 → accepted
 """
 from __future__ import annotations
 
 import logging
+import re
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -24,6 +26,41 @@ try:
 except ImportError:
     fuzz = None
     log.warning("rapidfuzz not installed, matcher will not work")
+
+
+def _extract_slug_teams(slug: str) -> tuple[str, str]:
+    """Extract team names from NB slug like 'al-dzhubail-al-batin-prognoz-na-match'.
+
+    Removes the trailing '-prognoz-na-match' suffix and splits on '-vs-' or
+    mid-point heuristic.
+    """
+    if not slug:
+        return ("", "")
+    # Remove common suffixes
+    slug = re.sub(r"-prognoz-na-match$", "", slug)
+    slug = re.sub(r"-prognozy?$", "", slug)
+    # Try splitting on common separators
+    for sep in ("-vs-", "-v-"):
+        if sep in slug:
+            parts = slug.split(sep, 1)
+            return (parts[0].replace("-", " ").strip(), parts[1].replace("-", " ").strip())
+    return (slug.replace("-", " ").strip(), "")
+
+
+def _extract_kush_slug_teams(url: str) -> tuple[str, str]:
+    """Extract team names from Kush URL like '/event/12345-team1-team2'."""
+    if not url:
+        return ("", "")
+    m = re.search(r"/event/\d+-(.*)", url)
+    if not m:
+        return ("", "")
+    slug = m.group(1)
+    # Kush slugs use '-' as separator; try to split on '-vs-'
+    for sep in ("-vs-", "-v-"):
+        if sep in slug:
+            parts = slug.split(sep, 1)
+            return (parts[0].replace("-", " ").strip(), parts[1].replace("-", " ").strip())
+    return (slug.replace("-", " ").strip(), "")
 
 
 class EventMatcher:
@@ -45,14 +82,41 @@ class EventMatcher:
         self,
         nb_match: Match,
         kush_events: list[KushEvent],
+        kush_league_name: Optional[str] = None,
     ) -> Optional[MatchResult]:
         """Find the best matching Kush event for an NB-Bet match.
 
+        Args:
+            nb_match: The NB-Bet match to find on Kush.
+            kush_events: All available Kush events.
+            kush_league_name: Expected Kush league name (from sl_chemps_zamen).
+                If provided, events are pre-filtered by league first.
+
         Returns MatchResult if confidence >= min_confidence, else None.
         """
+        # Pre-filter by league if mapping is available
+        candidates = kush_events
+        if kush_league_name:
+            filtered = [
+                e for e in kush_events
+                if e.league and kush_league_name.lower() in e.league.lower()
+            ]
+            if filtered:
+                candidates = filtered
+                log.debug(
+                    "League pre-filter: %d -> %d events for '%s'",
+                    len(kush_events), len(filtered), kush_league_name,
+                )
+            else:
+                # No events matched by league — fall back to all events
+                log.debug(
+                    "League pre-filter found 0 events for '%s', using all %d",
+                    kush_league_name, len(kush_events),
+                )
+
         best: Optional[MatchResult] = None
 
-        for event in kush_events:
+        for event in candidates:
             result = self._score(nb_match, event)
             if result is None:
                 continue

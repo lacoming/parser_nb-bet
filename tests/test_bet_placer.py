@@ -103,7 +103,7 @@ class TestBetResult:
 class TestComputeRatio:
     def test_normal(self):
         placer, _, _ = _make_placer()
-        # kf_kush=2.30, kf_nb=2.10, roi=0.05
+        # kf_kush=2.30, kf_nb=2.10, roi=0.05 (global fallback)
         # ratio = 2.30 * 1.05 / 2.10 = 1.15
         ratio = placer.compute_ratio(2.30, 2.10)
         assert abs(ratio - 1.15) < 0.01
@@ -123,6 +123,26 @@ class TestComputeRatio:
         ratio = placer.compute_ratio(5.00, 2.00)
         # 5.00 * 1.05 / 2.00 = 2.625
         assert abs(ratio - 2.625) < 0.001
+
+    def test_per_league_roi(self):
+        placer, _, _ = _make_placer()
+        # Per-league ROI = 0.15 overrides global 0.05
+        # ratio = 2.30 * 1.15 / 2.10 = 1.2595
+        ratio = placer.compute_ratio(2.30, 2.10, roi=0.15)
+        assert abs(ratio - (2.30 * 1.15 / 2.10)) < 0.001
+
+    def test_roi_zero_falls_back_to_global(self):
+        placer, _, _ = _make_placer()
+        # roi=0 should fall back to global roi=0.05
+        ratio_fallback = placer.compute_ratio(2.30, 2.10, roi=0.0)
+        ratio_default = placer.compute_ratio(2.30, 2.10)
+        assert abs(ratio_fallback - ratio_default) < 0.001
+
+    def test_roi_none_falls_back_to_global(self):
+        placer, _, _ = _make_placer()
+        ratio_none = placer.compute_ratio(2.30, 2.10, roi=None)
+        ratio_default = placer.compute_ratio(2.30, 2.10)
+        assert abs(ratio_none - ratio_default) < 0.001
 
 
 # ---------------------------------------------------------------------------

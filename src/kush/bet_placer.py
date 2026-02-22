@@ -38,11 +38,16 @@ class BetPlacer:
         self._thresholds = thresholds
         self._kush_config = kush_config
 
-    def compute_ratio(self, kf_kush: float, kf_nb: float) -> float:
-        """Compute ratio: kf_kush * (1 + ROI) / kf_nb."""
+    def compute_ratio(self, kf_kush: float, kf_nb: float, roi: Optional[float] = None) -> float:
+        """Compute ratio: kf_kush * (1 + ROI) / kf_nb.
+
+        Args:
+            roi: Per-league ROI. Falls back to global config if None or 0.
+        """
         if kf_nb <= 0:
             return 0.0
-        return kf_kush * (1 + self._thresholds.roi) / kf_nb
+        effective_roi = roi if roi else self._thresholds.roi
+        return kf_kush * (1 + effective_roi) / kf_nb
 
     def get_threshold(self, league: str) -> float:
         """Return ratio threshold for a league (big or default)."""
@@ -53,13 +58,17 @@ class BetPlacer:
 
     def check_ratio(
         self, kf_kush: float, kf_nb: float, league: str,
+        roi: Optional[float] = None,
     ) -> tuple[float, float, bool]:
         """Check if ratio passes threshold.
+
+        Args:
+            roi: Per-league ROI override. Falls back to global config if None/0.
 
         Returns:
             (ratio, threshold, passes)
         """
-        ratio = self.compute_ratio(kf_kush, kf_nb)
+        ratio = self.compute_ratio(kf_kush, kf_nb, roi=roi)
         threshold = self.get_threshold(league)
         return ratio, threshold, ratio > threshold
 
@@ -71,6 +80,7 @@ class BetPlacer:
         bet_type_kush: str,
         kf_nb: float,
         dry_run: bool = True,
+        roi: Optional[float] = None,
     ) -> BetResult:
         """Attempt to place a bet on Kush.
 
@@ -81,6 +91,7 @@ class BetPlacer:
             bet_type_kush: Bet type string on Kush (e.g. "П1", "ТБ (2.50)").
             kf_nb: The NB-Bet coefficient for ratio calculation.
             dry_run: If True, do not actually place the bet.
+            roi: Per-league ROI override. Falls back to global config if None/0.
 
         Returns:
             BetResult with outcome details.
@@ -113,7 +124,7 @@ class BetPlacer:
         kf_kush = odds_entry.coefficient
 
         # Step 2: Check ratio
-        ratio, threshold, passes = self.check_ratio(kf_kush, kf_nb, match.league)
+        ratio, threshold, passes = self.check_ratio(kf_kush, kf_nb, match.league, roi=roi)
 
         if not passes:
             log.info(

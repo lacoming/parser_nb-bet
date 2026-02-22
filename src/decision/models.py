@@ -46,6 +46,9 @@ class LeagueSetting:
     leagues: list[str] = field(default_factory=list)
     condition_raw: str = ""  # Original condition text from Excel
 
+    # ROI percentage for this league group (e.g. 0.15 = 15%)
+    roi: float = 0.0
+
     # Parsed condition bounds (set by condition parser)
     min_kf1: float = 0.0
     max_kf1: float = 999.0
