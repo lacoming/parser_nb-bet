@@ -5,11 +5,12 @@ One cycle: NB-Bet -> filter -> decide -> Kush match -> bet -> excel -> telegram.
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from src.config.schema import AppConfig
-from src.decision.engine import DecisionEngine
 from src.decision.league_filter import LeagueFilter
+from src.decision.models import BetDecision
 from src.excel.models import ExcelRow, MissingRow
 from src.excel.writer import ExcelWriter
 from src.kush.bet_placer import BetPlacer
@@ -73,7 +74,6 @@ def run_cycle(
     state: AppState,
     nb_client: NbClient,
     league_filter: LeagueFilter,
-    decision_engine: DecisionEngine,
     excel_writer: ExcelWriter,
     telegram: TelegramNotifier,
     proxies: Optional[list[str]] = None,
@@ -104,15 +104,42 @@ def run_cycle(
     stats.filtered = len(filtered)
     log.info("League filter: %d -> %d matches", stats.total_matches, stats.filtered)
 
-    # 3. Decision engine
-    passing = []
-    for match in filtered:
-        decisions = decision_engine.get_passing_decisions(match)
-        if decisions:
-            # Find the league setting to get per-league ROI
-            setting = league_filter.find_setting(match)
-            league_roi = setting.roi if setting else 0.0
-            passing.append((match, decisions, league_roi))
+    # 2b. Skip matches >2 days away (Kush only has today+tomorrow)
+    max_date = datetime.now(timezone.utc) + timedelta(days=2)
+    near_matches = [m for m in filtered if m.start_time_utc <= max_date]
+    far_skipped = len(filtered) - len(near_matches)
+    if far_skipped:
+        log.info("Skipped %d matches >2 days away (not on Kush yet)", far_skipped)
+
+    # 2c. Skip already-processed matches (Bug 3 fix)
+    new_matches = [m for m in near_matches if not state.is_processed(m.match_key)]
+    skipped = len(filtered) - len(new_matches)
+    if skipped:
+        log.info("Skipped %d already-processed matches", skipped)
+
+    # 3. Decision engine — one bet type per match from leagues.xlsx
+    passing: list[tuple[Match, BetDecision, float]] = []
+    for match in new_matches:
+        setting = league_filter.find_setting(match)
+        if not setting:
+            log.debug("No league setting for %s", match.match_key)
+            continue
+        league_roi = setting.roi
+        # The league setting defines the ONE bet type for this group
+        target_bet_type = setting.bet_type  # "1" | "2" | "1X" | "X"
+        # Check if match odds satisfy the league conditions
+        if not setting.check(match.odds_1_end, match.odds_2_end):
+            log.debug(
+                "Conditions not met for %s bet=%s: kf1=%s kf2=%s",
+                match.match_key, target_bet_type, match.odds_1_end, match.odds_2_end,
+            )
+            continue
+        decision = BetDecision(
+            bet_type=target_bet_type,
+            passes=True,
+            reasons=[f"league: {setting.condition_raw}"],
+        )
+        passing.append((match, decision, league_roi))
     stats.decided = len(passing)
     log.info("Decision engine: %d matches with passing bets", stats.decided)
 
@@ -161,93 +188,91 @@ def run_cycle(
         kush_config=config.kush,
     )
 
-    # 5. Match and place bets
-    for match, decisions, league_roi in passing:
+    # 5. Match and place bets (one bet type per match)
+    for match, decision, league_roi in passing:
         kush_league = league_filter.get_kush_league(match.league)
         result = matcher.find_best_match(match, all_events, kush_league_name=kush_league)
 
         if result is None:
             stats.missing += 1
-            if state.enqueue_pending(match.match_key, [d.bet_type for d in decisions]):
+            if state.enqueue_pending(match.match_key, [decision.bet_type]):
                 telegram.notify_missing(
                     match_key=match.match_key,
                     league=match.league,
                     team_home=match.team_home,
                     team_away=match.team_away,
                 )
-            # Build MissingRow for each decision
-            for decision in decisions:
-                kf_nb = _get_kf_nb(match, decision.bet_type)
-                threshold = bet_placer.get_threshold(match.league)
-                effective_roi = league_roi if league_roi else config.thresholds.roi
-                # min_kf_kush = threshold * kf_nb / (1 + ROI)
-                min_kf = (threshold * kf_nb / (1 + effective_roi)) if kf_nb and kf_nb > 0 else 0.0
-                excel_writer.add_missing_row(MissingRow(
-                    date=match.start_time_utc.strftime("%d.%m.%Y"),
-                    time=match.start_time_utc.strftime("%H:%M"),
-                    league=match.league,
-                    team_home=match.team_home,
-                    team_away=match.team_away,
-                    bet_type=decision.bet_type,
-                    odds_1_start=f"{match.odds_1_start:.2f}" if match.odds_1_start else "",
-                    odds_x_start=f"{match.odds_x_start:.2f}" if match.odds_x_start else "",
-                    odds_2_start=f"{match.odds_2_start:.2f}" if match.odds_2_start else "",
-                    kf_nb=f"{kf_nb:.2f}" if kf_nb else "",
-                    min_kf_kush=f"{min_kf:.2f}" if min_kf else "",
-                    link=match.nb_slug,
-                ))
+            kf_nb = _get_kf_nb(match, decision.bet_type)
+            threshold = bet_placer.get_threshold(match.league)
+            effective_roi = league_roi if league_roi else config.thresholds.roi
+            min_kf = (threshold * kf_nb / (1 + effective_roi)) if kf_nb and kf_nb > 0 else 0.0
+            excel_writer.add_missing_row(MissingRow(
+                date=match.start_time_utc.strftime("%d.%m.%Y"),
+                time=match.start_time_utc.strftime("%H:%M"),
+                league=match.league,
+                team_home=match.team_home,
+                team_away=match.team_away,
+                bet_type=decision.bet_type,
+                odds_1_start=f"{match.odds_1_start:.2f}" if match.odds_1_start else "",
+                odds_x_start=f"{match.odds_x_start:.2f}" if match.odds_x_start else "",
+                odds_2_start=f"{match.odds_2_start:.2f}" if match.odds_2_start else "",
+                kf_nb=f"{kf_nb:.2f}" if kf_nb else "",
+                min_kf_kush=f"{min_kf:.2f}" if min_kf else "",
+                link=match.nb_slug,
+            ))
+            state.record_processed(match.match_key)
             continue
 
         stats.matched += 1
         kush_event = result.kush_event
 
-        for decision in decisions:
-            try:
-                # Determine which NB odds to use for ratio
-                kf_nb = _get_kf_nb(match, decision.bet_type)
-                if kf_nb is None or kf_nb <= 0:
-                    log.warning("No NB odds for %s on %s", decision.bet_type, match.match_key)
-                    continue
+        try:
+            # Determine which NB odds to use for ratio
+            kf_nb = _get_kf_nb(match, decision.bet_type)
+            if kf_nb is None or kf_nb <= 0:
+                log.warning("No NB odds for %s on %s", decision.bet_type, match.match_key)
+                continue
 
-                # Translate decision bet type to Kush format (e.g. "1" → "П1")
-                bet_type_kush = _to_kush_bet_type(decision.bet_type)
+            # Translate decision bet type to Kush format (e.g. "1" → "П1")
+            bet_type_kush = _to_kush_bet_type(decision.bet_type)
 
-                bet_result = bet_placer.place_bet(
-                    match=match,
-                    kush_event_id=kush_event.event_id,
-                    kush_event_url=kush_event.url,
-                    bet_type_kush=bet_type_kush,
-                    kf_nb=kf_nb,
-                    dry_run=config.kush.dry_run,
-                    roi=league_roi,
+            bet_result = bet_placer.place_bet(
+                match=match,
+                kush_event_id=kush_event.event_id,
+                kush_event_url=kush_event.url,
+                bet_type_kush=bet_type_kush,
+                kf_nb=kf_nb,
+                dry_run=config.kush.dry_run,
+                roi=league_roi,
+            )
+            if bet_result.success:
+                stats.placed += 1
+                state.record_placed(match.match_key)
+
+                row = _match_to_excel_row(match)
+                row.bet_type = bet_result.bet_type
+                row.kf_kush = f"{bet_result.kf_kush:.2f}"
+                row.ratio = f"{bet_result.ratio:.3f}"
+                excel_writer.add_row(row)
+
+                telegram.notify_placed(
+                    match_key=match.match_key,
+                    bet_type=bet_result.bet_type,
+                    kf_nb=bet_result.kf_nb,
+                    kf_kush=bet_result.kf_kush,
+                    ratio=bet_result.ratio,
+                    threshold=bet_result.threshold,
+                    dry_run=bet_result.dry_run,
+                    league=match.league,
+                    team_home=match.team_home,
+                    team_away=match.team_away,
                 )
-                if bet_result.success:
-                    stats.placed += 1
-                    state.record_placed(match.match_key)
-
-                    row = _match_to_excel_row(match)
-                    row.bet_type = bet_result.bet_type
-                    row.kf_kush = f"{bet_result.kf_kush:.2f}"
-                    row.ratio = f"{bet_result.ratio:.3f}"
-                    excel_writer.add_row(row)
-
-                    telegram.notify_placed(
-                        match_key=match.match_key,
-                        bet_type=bet_result.bet_type,
-                        kf_nb=bet_result.kf_nb,
-                        kf_kush=bet_result.kf_kush,
-                        ratio=bet_result.ratio,
-                        threshold=bet_result.threshold,
-                        dry_run=bet_result.dry_run,
-                        league=match.league,
-                        team_home=match.team_home,
-                        team_away=match.team_away,
-                    )
-                else:
-                    log.warning("Bet failed: %s", bet_result.summary)
-            except Exception:
-                log.exception("Error placing bet for %s", match.match_key)
-                stats.errors += 1
+            else:
+                log.warning("Bet failed: %s", bet_result.summary)
+                state.record_processed(match.match_key)
+        except Exception:
+            log.exception("Error placing bet for %s", match.match_key)
+            stats.errors += 1
 
     # 6. Save Excel (if any placed bets or missing matches)
     if excel_writer.row_count > 0 or excel_writer.missing_count > 0:
@@ -297,5 +322,6 @@ def _get_kf_nb(match: Match, bet_type: str) -> Optional[float]:
     elif bt in ("X", "НИЧЬЯ"):
         return match.odds_x_start
     elif bt in ("1X",):
-        return match.odds_1x_start
+        # Bug 2 fix: 1X ratio uses kf1 (not min(kf1, kfX))
+        return match.odds_1_start
     return match.odds_1_start  # fallback

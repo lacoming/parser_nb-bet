@@ -99,7 +99,6 @@ def main() -> None:
 
     # Build shared components for cycle
     from src.config.loader import load_proxies
-    from src.decision.engine import DecisionEngine
     from src.decision.league_filter import LeagueFilter
     from src.decision.league_loader import find_leagues_xlsx, load_league_settings
     from src.excel.writer import ExcelWriter
@@ -137,7 +136,6 @@ def main() -> None:
 
     league_settings = load_league_settings(leagues_path) if leagues_path else []
     league_filter = LeagueFilter(settings=league_settings)
-    decision_engine = DecisionEngine()
     excel_writer = ExcelWriter(output_dir=config.files.output_dir)
     telegram = TelegramNotifier(
         token=config.telegram.token,
@@ -151,7 +149,6 @@ def main() -> None:
             state=state,
             nb_client=nb_client,
             league_filter=league_filter,
-            decision_engine=decision_engine,
             excel_writer=excel_writer,
             telegram=telegram,
             proxies=proxies,

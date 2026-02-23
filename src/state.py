@@ -22,6 +22,7 @@ class AppState:
         self._pending: dict[str, PendingEntry] = {}
         self._placed: set[str] = set()
         self._known: set[str] = set()
+        self._processed: set[str] = set()  # all fully processed (placed/rejected/missing)
         self._recheck_interval = recheck_interval  # seconds between rechecks
         self._max_checks = max_checks  # max rechecks before expiry
 
@@ -53,7 +54,17 @@ class AppState:
         """Record a bet as placed."""
         self._placed.add(match_key)
         self._known.add(match_key)
+        self._processed.add(match_key)
         self._pending.pop(match_key, None)
+
+    def record_processed(self, match_key: str) -> None:
+        """Record a match as fully processed (placed, rejected, or missing)."""
+        self._processed.add(match_key)
+        self._known.add(match_key)
+
+    def is_processed(self, match_key: str) -> bool:
+        """Check if match has been fully processed in a previous cycle."""
+        return match_key in self._processed
 
     def is_known(self, match_key: str) -> bool:
         """Check if match_key has been seen (pending or placed)."""

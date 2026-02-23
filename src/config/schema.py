@@ -55,7 +55,7 @@ class KushConfig:
     password: str = ""
     dry_run: bool = True
     default_stake: int = 100
-    match_time_tolerance_hours: int = 2
+    match_time_tolerance_hours: int = 3
     min_confidence: float = 0.80
 
 

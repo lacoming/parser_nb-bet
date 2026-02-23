@@ -23,7 +23,6 @@ from src.config.schema import (
     TelegramConfig,
     ThresholdsConfig,
 )
-from src.decision.engine import DecisionEngine
 from src.decision.league_filter import LeagueFilter
 from src.decision.models import LeagueSetting
 from src.excel.writer import ExcelWriter
@@ -106,7 +105,6 @@ class TestE2EDryRun:
         # League settings: allow Premier League
         league_settings = [LeagueSetting(bet_type="1", leagues=["Premier League"])]
         league_filter = LeagueFilter(settings=league_settings)
-        decision_engine = DecisionEngine()
         excel_writer = ExcelWriter(output_dir=str(tmp_path))
 
         # Mock telegram (disabled)
@@ -158,7 +156,6 @@ class TestE2EDryRun:
                 state=state,
                 nb_client=nb_client,
                 league_filter=league_filter,
-                decision_engine=decision_engine,
                 excel_writer=excel_writer,
                 telegram=telegram,
             )
@@ -184,7 +181,6 @@ class TestE2EDryRun:
 
         league_settings = [LeagueSetting(bet_type="1", leagues=["Premier League"])]
         league_filter = LeagueFilter(settings=league_settings)
-        decision_engine = DecisionEngine()
         excel_writer = ExcelWriter(output_dir=str(tmp_path))
         telegram = MagicMock(spec=TelegramNotifier)
 
@@ -193,7 +189,6 @@ class TestE2EDryRun:
             state=state,
             nb_client=nb_client,
             league_filter=league_filter,
-            decision_engine=decision_engine,
             excel_writer=excel_writer,
             telegram=telegram,
         )
@@ -213,7 +208,6 @@ class TestE2EDryRun:
 
         league_settings = [LeagueSetting(bet_type="1", leagues=["Premier League"])]
         league_filter = LeagueFilter(settings=league_settings)
-        decision_engine = DecisionEngine()
         excel_writer = ExcelWriter(output_dir=str(tmp_path))
         telegram = MagicMock(spec=TelegramNotifier)
 
@@ -231,7 +225,6 @@ class TestE2EDryRun:
                 state=state,
                 nb_client=nb_client,
                 league_filter=league_filter,
-                decision_engine=decision_engine,
                 excel_writer=excel_writer,
                 telegram=telegram,
             )
@@ -254,7 +247,6 @@ class TestE2EDryRun:
         # Only allow "La Liga"
         league_settings = [LeagueSetting(bet_type="1", leagues=["La Liga"])]
         league_filter = LeagueFilter(settings=league_settings)
-        decision_engine = DecisionEngine()
         excel_writer = ExcelWriter(output_dir=str(tmp_path))
         telegram = MagicMock(spec=TelegramNotifier)
 
@@ -263,7 +255,6 @@ class TestE2EDryRun:
             state=state,
             nb_client=nb_client,
             league_filter=league_filter,
-            decision_engine=decision_engine,
             excel_writer=excel_writer,
             telegram=telegram,
         )
@@ -282,7 +273,6 @@ class TestE2EDryRun:
 
         league_settings = []
         league_filter = LeagueFilter(settings=league_settings)
-        decision_engine = DecisionEngine()
         excel_writer = ExcelWriter(output_dir=str(tmp_path))
         telegram = MagicMock(spec=TelegramNotifier)
 
@@ -291,7 +281,6 @@ class TestE2EDryRun:
             state=state,
             nb_client=nb_client,
             league_filter=league_filter,
-            decision_engine=decision_engine,
             excel_writer=excel_writer,
             telegram=telegram,
         )
@@ -310,7 +299,6 @@ class TestE2EDryRun:
 
         league_settings = [LeagueSetting(bet_type="1", leagues=["Premier League"])]
         league_filter = LeagueFilter(settings=league_settings)
-        decision_engine = DecisionEngine()
         excel_writer = ExcelWriter(output_dir=str(tmp_path))
         telegram = MagicMock(spec=TelegramNotifier)
 
@@ -322,7 +310,6 @@ class TestE2EDryRun:
                 state=state,
                 nb_client=nb_client,
                 league_filter=league_filter,
-                decision_engine=decision_engine,
                 excel_writer=excel_writer,
                 telegram=telegram,
             )
@@ -342,7 +329,6 @@ class TestE2EDryRun:
 
         league_settings = [LeagueSetting(bet_type="1", leagues=["Premier League"])]
         league_filter = LeagueFilter(settings=league_settings)
-        decision_engine = DecisionEngine()
         excel_writer = ExcelWriter(output_dir=str(tmp_path))
         telegram = MagicMock(spec=TelegramNotifier)
 
@@ -357,31 +343,32 @@ class TestE2EDryRun:
 
             run_cycle(
                 config=config, state=state, nb_client=nb_client,
-                league_filter=league_filter, decision_engine=decision_engine,
+                league_filter=league_filter,
                 excel_writer=excel_writer, telegram=telegram,
             )
 
         assert state.pending_count >= 1
 
-    def test_decision_engine_skip_equal_odds(self, tmp_path):
-        """When kf1 == kf2, decision engine skips → no Kush interaction."""
+    def test_skip_equal_odds_with_relation_condition(self, tmp_path):
+        """When kf1 == kf2 and setting requires kf1>kf2, match is skipped."""
         config = _make_config(str(tmp_path))
         state = AppState()
-        # Equal odds → decision engine should skip all
         match = _make_match(kf1=2.50, kf2=2.50, kfx=3.00)
 
         nb_client = MagicMock()
         nb_client.get_matches.return_value = [match]
 
-        league_settings = [LeagueSetting(bet_type="1", leagues=["Premier League"])]
+        league_settings = [LeagueSetting(
+            bet_type="1", leagues=["Premier League"],
+            kf_relation="kf1>kf2",
+        )]
         league_filter = LeagueFilter(settings=league_settings)
-        decision_engine = DecisionEngine()
         excel_writer = ExcelWriter(output_dir=str(tmp_path))
         telegram = MagicMock(spec=TelegramNotifier)
 
         stats = run_cycle(
             config=config, state=state, nb_client=nb_client,
-            league_filter=league_filter, decision_engine=decision_engine,
+            league_filter=league_filter,
             excel_writer=excel_writer, telegram=telegram,
         )
 

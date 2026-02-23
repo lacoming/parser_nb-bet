@@ -417,14 +417,27 @@ def _extract_error(html: str) -> str:
     if not html:
         return "Empty response"
     soup = BeautifulSoup(html, "lxml")
-    # Look for error divs in order of specificity
-    for cls in ("alert-danger", "alert-warning", "help-block"):
-        err_div = soup.find("div", class_=cls)
-        if err_div:
-            text = err_div.get_text(strip=True)
+    # Look for error divs/spans in order of specificity
+    selectors = [
+        ("div", "alert-danger"),
+        ("div", "alert-warning"),
+        ("div", "help-block"),
+        ("p", "help-block-error"),
+        ("span", "help-block"),
+        ("div", "error-summary"),
+    ]
+    for tag, cls in selectors:
+        el = soup.find(tag, class_=cls)
+        if el:
+            text = el.get_text(strip=True)
             if text:
                 return text
-    # Log HTML snippet at DEBUG for diagnostics
-    snippet = html[:500].replace("\n", " ")
-    log.debug("_extract_error: no known selector matched, HTML: %s", snippet)
-    return "Unknown error (no success message)"
+    # Try finding any element with "error" or "ошибк" text
+    for el in soup.find_all(["div", "p", "span", "li"]):
+        text = el.get_text(strip=True)
+        if text and ("ошибк" in text.lower() or "error" in text.lower() or "не удалось" in text.lower()):
+            return text[:300]
+    # Log HTML snippet at WARNING for diagnostics
+    snippet = html[:1000].replace("\n", " ").replace("\r", "")
+    log.warning("_extract_error: no error selector matched. HTML snippet: %s", snippet)
+    return f"Unknown error (no success message). Response length: {len(html)} chars"
