@@ -10,7 +10,7 @@ from typing import Optional
 from src.config.schema import AppConfig
 from src.decision.engine import DecisionEngine
 from src.decision.league_filter import LeagueFilter
-from src.excel.models import ExcelRow
+from src.excel.models import ExcelRow, MissingRow
 from src.excel.writer import ExcelWriter
 from src.kush.bet_placer import BetPlacer
 from src.kush.client import KushClient
@@ -21,7 +21,20 @@ from src.nb.models import Match
 from src.state import AppState
 from src.telegram.notifier import TelegramNotifier
 
-log = logging.getLogger(__name__)
+log = logging.getLogger("parser_nb_bet.scheduler.cycle_runner")
+
+# Decision engine bet types → Kush bet types
+_DECISION_TO_KUSH: dict[str, str] = {
+    "1": "П1",
+    "2": "П2",
+    "X": "X",
+    "1X": "1X",
+}
+
+
+def _to_kush_bet_type(bet_type: str) -> str:
+    """Translate decision engine bet type to Kush format."""
+    return _DECISION_TO_KUSH.get(bet_type, bet_type)
 
 
 class CycleStats:
@@ -125,8 +138,11 @@ def run_cycle(
         )
         kush_session.init_csrf()
         kush_client = KushClient(kush_session)
-        all_events = kush_client.get_all_events()
-        log.info("Fetched %d Kush events", len(all_events))
+        # Fetch events for today and tomorrow (Kush only has 2 days)
+        all_events = kush_client.get_all_events(day=0)
+        events_tomorrow = kush_client.get_all_events(day=1)
+        all_events.extend(events_tomorrow)
+        log.info("Fetched %d Kush events (today+tomorrow)", len(all_events))
     except Exception:
         log.exception("Failed to connect to Kush")
         stats.errors += 1
@@ -159,6 +175,27 @@ def run_cycle(
                     team_home=match.team_home,
                     team_away=match.team_away,
                 )
+            # Build MissingRow for each decision
+            for decision in decisions:
+                kf_nb = _get_kf_nb(match, decision.bet_type)
+                threshold = bet_placer.get_threshold(match.league)
+                effective_roi = league_roi if league_roi else config.thresholds.roi
+                # min_kf_kush = threshold * kf_nb / (1 + ROI)
+                min_kf = (threshold * kf_nb / (1 + effective_roi)) if kf_nb and kf_nb > 0 else 0.0
+                excel_writer.add_missing_row(MissingRow(
+                    date=match.start_time_utc.strftime("%d.%m.%Y"),
+                    time=match.start_time_utc.strftime("%H:%M"),
+                    league=match.league,
+                    team_home=match.team_home,
+                    team_away=match.team_away,
+                    bet_type=decision.bet_type,
+                    odds_1_start=f"{match.odds_1_start:.2f}" if match.odds_1_start else "",
+                    odds_x_start=f"{match.odds_x_start:.2f}" if match.odds_x_start else "",
+                    odds_2_start=f"{match.odds_2_start:.2f}" if match.odds_2_start else "",
+                    kf_nb=f"{kf_nb:.2f}" if kf_nb else "",
+                    min_kf_kush=f"{min_kf:.2f}" if min_kf else "",
+                    link=match.nb_slug,
+                ))
             continue
 
         stats.matched += 1
@@ -172,11 +209,14 @@ def run_cycle(
                     log.warning("No NB odds for %s on %s", decision.bet_type, match.match_key)
                     continue
 
+                # Translate decision bet type to Kush format (e.g. "1" → "П1")
+                bet_type_kush = _to_kush_bet_type(decision.bet_type)
+
                 bet_result = bet_placer.place_bet(
                     match=match,
                     kush_event_id=kush_event.event_id,
                     kush_event_url=kush_event.url,
-                    bet_type_kush=decision.bet_type,
+                    bet_type_kush=bet_type_kush,
                     kf_nb=kf_nb,
                     dry_run=config.kush.dry_run,
                     roi=league_roi,
@@ -209,8 +249,8 @@ def run_cycle(
                 log.exception("Error placing bet for %s", match.match_key)
                 stats.errors += 1
 
-    # 6. Save Excel
-    if excel_writer.row_count > 0:
+    # 6. Save Excel (if any placed bets or missing matches)
+    if excel_writer.row_count > 0 or excel_writer.missing_count > 0:
         try:
             path = excel_writer.save()
             telegram.send_document(path, caption="Результаты цикла")
@@ -245,14 +285,17 @@ def run_cycle(
 
 
 def _get_kf_nb(match: Match, bet_type: str) -> Optional[float]:
-    """Extract the appropriate NB coefficient for a given bet type."""
+    """Extract the appropriate NB START coefficient for a given bet type.
+
+    Uses START odds (not END) because the ratio formula compares opening lines.
+    """
     bt = bet_type.upper()
     if bt in ("1", "П1"):
-        return match.odds_1_end
+        return match.odds_1_start
     elif bt in ("2", "П2"):
-        return match.odds_2_end
+        return match.odds_2_start
     elif bt in ("X", "НИЧЬЯ"):
-        return match.odds_x_end
+        return match.odds_x_start
     elif bt in ("1X",):
-        return match.odds_1x_end
-    return match.odds_1_end  # fallback
+        return match.odds_1x_start
+    return match.odds_1_start  # fallback

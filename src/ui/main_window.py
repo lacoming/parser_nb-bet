@@ -16,7 +16,7 @@ import tkinter as tk
 from tkinter import messagebox, scrolledtext
 from typing import Callable, Optional
 
-log = logging.getLogger(__name__)
+log = logging.getLogger("parser_nb_bet.ui.main_window")
 
 
 class QueueLogHandler(logging.Handler):

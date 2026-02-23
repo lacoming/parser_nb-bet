@@ -10,7 +10,7 @@ import threading
 import time
 from datetime import datetime, timedelta, timezone
 
-log = logging.getLogger(__name__)
+log = logging.getLogger("parser_nb_bet.scheduler.msk_scheduler")
 
 # MSK = UTC+3 (fixed, no DST since 2014)
 MSK = timezone(timedelta(hours=3))

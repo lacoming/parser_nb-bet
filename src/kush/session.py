@@ -100,6 +100,13 @@ class KushSession:
 
         raise KushSessionError("Failed to extract CSRF token from page")
 
+    def refresh_csrf(self) -> None:
+        """Re-fetch CSRF token silently. Safe to call between requests."""
+        try:
+            self.init_csrf()
+        except Exception:
+            log.warning("refresh_csrf failed, will retry on next request")
+
     def login(self, username: str, password: str) -> bool:
         """Authenticate with kushvsporte.ru.
 

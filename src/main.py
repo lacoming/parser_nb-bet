@@ -57,7 +57,10 @@ def main() -> None:
     if is_gui:
         from src.ui.main_window import MainWindow
 
-        window = MainWindow()
+        title = "parser_nb-bet"
+        if config.kush.dry_run:
+            title += " [DRY-RUN]"
+        window = MainWindow(title=title)
         ui_handler = window.log_handler
 
     # Setup logging
@@ -68,6 +71,8 @@ def main() -> None:
         "gui" if is_gui else "once" if args.once else "daemon" if args.daemon else "test-telegram",
     )
     logger.info("  dry-run: %s", config.kush.dry_run)
+    if config.kush.dry_run:
+        logger.warning("DRY-RUN MODE: ставки НЕ будут размещаться! Измените dry_run=false в config.json")
 
     # Init state
     state = AppState()

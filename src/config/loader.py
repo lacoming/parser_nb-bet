@@ -30,14 +30,46 @@ class ConfigValidationError(Exception):
 
 
 def load_config(path: str = "config.json") -> AppConfig:
-    """Load config from JSON file, apply env overrides, validate."""
+    """Load config from JSON file, apply env overrides, validate.
+
+    Config resolution order:
+    1. NB_CONFIG_PATH env var (if set)
+    2. Provided path as-is (if it exists)
+    3. Path relative to exe directory (for PyInstaller frozen mode)
+    4. Path relative to project root (src/../)
+    5. Empty dict (all defaults)
+    """
     config_path = os.environ.get("NB_CONFIG_PATH", path)
     p = Path(config_path)
 
+    # If relative path not found, try next to the executable (PyInstaller)
+    if not p.is_absolute() and not p.exists():
+        import sys
+
+        if getattr(sys, "frozen", False):
+            exe_dir = Path(sys.executable).parent
+            candidate = exe_dir / config_path
+            if candidate.exists():
+                p = candidate
+        else:
+            # Dev mode: try project root (parent of src/)
+            project_root = Path(__file__).resolve().parent.parent.parent
+            candidate = project_root / config_path
+            if candidate.exists():
+                p = candidate
+
     if p.exists():
+        import logging
+
+        logging.getLogger("parser_nb_bet.config").info("Config loaded from: %s", p.resolve())
         with open(p, encoding="utf-8") as f:
             raw = json.load(f)
     else:
+        import logging
+
+        logging.getLogger("parser_nb_bet.config").warning(
+            "Config file not found: %s — using defaults (dry_run=True!)", config_path,
+        )
         raw = {}
 
     cfg = _parse_raw(raw)
@@ -107,9 +139,28 @@ def _validate(cfg: AppConfig) -> None:
         raise ConfigValidationError(errors)
 
 
+def resolve_file_near_exe(path: str) -> Path:
+    """Resolve a relative file path, checking next to exe for frozen mode."""
+    import sys
+
+    p = Path(path)
+    if p.is_absolute() or p.exists():
+        return p
+    if getattr(sys, "frozen", False):
+        candidate = Path(sys.executable).parent / path
+        if candidate.exists():
+            return candidate
+    else:
+        project_root = Path(__file__).resolve().parent.parent.parent
+        candidate = project_root / path
+        if candidate.exists():
+            return candidate
+    return p
+
+
 def load_proxies(path: str = "proxies.txt") -> list[str]:
     """Load proxy list from file. Returns empty list if file missing."""
-    p = Path(path)
+    p = resolve_file_near_exe(path)
     if not p.exists():
         return []
     lines = p.read_text(encoding="utf-8").splitlines()

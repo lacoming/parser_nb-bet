@@ -193,7 +193,10 @@ class BetPlacer:
         ratio: float,
         threshold: float,
     ) -> BetResult:
-        """Execute real bet placement via add_coupon + create_coupon."""
+        """Execute real bet placement via add_coupon + create_coupon.
+
+        Refreshes CSRF before each attempt. On failure, re-logins and retries once.
+        """
         eid = odds_entry.eid or kush_event_url.split("/event/")[1].split("-")[0] if "/event/" in kush_event_url else odds_entry.eid
         cfid = odds_entry.cfid
 
@@ -218,40 +221,85 @@ class BetPlacer:
                     error=f"Login failed: {exc}",
                 )
 
-        # Step 4a: add_coupon — GET to extract form tokens
-        try:
-            tokens = self._add_coupon(eid, cfid, kush_event_url)
-        except Exception as exc:
+        for attempt in range(2):
+            # Refresh CSRF before every bet attempt
+            self._session.refresh_csrf()
+
+            # Step 4a: add_coupon — GET to extract form tokens
+            try:
+                tokens = self._add_coupon(eid, cfid, kush_event_url)
+            except Exception as exc:
+                if attempt == 0:
+                    log.warning("add_coupon failed (attempt 1), re-login & retry: %s", exc)
+                    self._relogin()
+                    continue
+                return self._make_result(
+                    match, odds_entry, kf_nb, ratio, threshold,
+                    placed=False, success=False,
+                    error=f"add_coupon failed: {exc}",
+                )
+
+            if not tokens:
+                if attempt == 0:
+                    log.warning("add_coupon returned no tokens (attempt 1), re-login & retry")
+                    self._relogin()
+                    continue
+                return self._make_result(
+                    match, odds_entry, kf_nb, ratio, threshold,
+                    placed=False, success=False,
+                    error="add_coupon returned no form tokens",
+                )
+
+            # Step 4b: create_coupon — POST to submit the bet
+            try:
+                success, message = self._create_coupon(
+                    tokens, kush_event_url,
+                )
+            except Exception as exc:
+                if attempt == 0:
+                    log.warning("create_coupon failed (attempt 1), re-login & retry: %s", exc)
+                    self._relogin()
+                    continue
+                return self._make_result(
+                    match, odds_entry, kf_nb, ratio, threshold,
+                    placed=False, success=False,
+                    error=f"create_coupon failed: {exc}",
+                )
+
+            if success:
+                return self._make_result(
+                    match, odds_entry, kf_nb, ratio, threshold,
+                    placed=True, success=True, error="",
+                )
+
+            # Bet failed — retry once with re-login
+            if attempt == 0:
+                log.warning("Bet failed (attempt 1): %s — re-login & retry", message)
+                self._relogin()
+                continue
+
             return self._make_result(
                 match, odds_entry, kf_nb, ratio, threshold,
                 placed=False, success=False,
-                error=f"add_coupon failed: {exc}",
+                error=message,
             )
 
-        if not tokens:
-            return self._make_result(
-                match, odds_entry, kf_nb, ratio, threshold,
-                placed=False, success=False,
-                error="add_coupon returned no form tokens",
-            )
-
-        # Step 4b: create_coupon — POST to submit the bet
-        try:
-            success, message = self._create_coupon(
-                tokens, kush_event_url,
-            )
-        except Exception as exc:
-            return self._make_result(
-                match, odds_entry, kf_nb, ratio, threshold,
-                placed=False, success=False,
-                error=f"create_coupon failed: {exc}",
-            )
-
+        # Should not reach here, but safety fallback
         return self._make_result(
             match, odds_entry, kf_nb, ratio, threshold,
-            placed=success, success=success,
-            error="" if success else message,
+            placed=False, success=False,
+            error="Max retry attempts reached",
         )
+
+    def _relogin(self) -> None:
+        """Re-login to Kush, swallowing exceptions."""
+        try:
+            self._session.login(
+                self._kush_config.login,
+                self._kush_config.password,
+            )
+        except Exception:
+            log.warning("Re-login failed during retry")
 
     def _add_coupon(
         self, eid: str, cfid: str, event_url: str,
@@ -369,11 +417,14 @@ def _extract_error(html: str) -> str:
     if not html:
         return "Empty response"
     soup = BeautifulSoup(html, "lxml")
-    # Look for error divs
-    err_div = soup.find("div", class_="alert-danger")
-    if err_div:
-        return err_div.get_text(strip=True)
-    err_div = soup.find("div", class_="help-block")
-    if err_div:
-        return err_div.get_text(strip=True)
+    # Look for error divs in order of specificity
+    for cls in ("alert-danger", "alert-warning", "help-block"):
+        err_div = soup.find("div", class_=cls)
+        if err_div:
+            text = err_div.get_text(strip=True)
+            if text:
+                return text
+    # Log HTML snippet at DEBUG for diagnostics
+    snippet = html[:500].replace("\n", " ")
+    log.debug("_extract_error: no known selector matched, HTML: %s", snippet)
     return "Unknown error (no success message)"

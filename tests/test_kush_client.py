@@ -39,20 +39,33 @@ LEAGUES_HTML = """
 
 EVENTS_HTML = """
 <html><body>
-<div class="event-row">
-  <div class="medium-text">21.02.2026</div>
-  <div class="d-inline-block d-md-block">Сб 18:00</div>
-  <a class="d-block" href="/event/12345-man-utd-vs-liverpool">
-    <div class="medium-text">Manchester United</div>
-    <div class="medium-text">Liverpool</div>
-  </a>
-</div>
-<div class="event-row">
-  <div class="medium-text">22.02.2026</div>
-  <a class="d-block" href="/event/67890-chelsea-vs-arsenal">
-    <div class="medium-text">Chelsea</div>
-    <div class="medium-text">Arsenal</div>
-  </a>
+<div class="eventsCenterChamp">
+  <div class="row align-items-center event-centerbet">
+    <div class="col-6 col-md-1 order-1">
+      <div class="medium-text d-inline-block d-md-block">18:00</div>
+      <div class="d-inline-block d-md-block">Суббота</div>
+    </div>
+    <div class="col-sm-4 col-md-3 col-xl-4 order-4 order-md-2 col-9">
+      <a class="d-block" href="/event/12345-man-utd-vs-liverpool"
+         title="Прогноз на матч Manchester United - Liverpool 21 Февраля 18:00">
+        <div class="medium-text text-truncate">Manchester United</div>
+        <div class="medium-text text-truncate">Liverpool</div>
+      </a>
+    </div>
+  </div>
+  <div class="row align-items-center event-centerbet">
+    <div class="col-6 col-md-1 order-1">
+      <div class="medium-text d-inline-block d-md-block">20:00</div>
+      <div class="d-inline-block d-md-block">Воскресенье</div>
+    </div>
+    <div class="col-sm-4 col-md-3 col-xl-4 order-4 order-md-2 col-9">
+      <a class="d-block" href="/event/67890-chelsea-vs-arsenal"
+         title="Прогноз на матч Chelsea - Arsenal 22 Февраля 20:00">
+        <div class="medium-text text-truncate">Chelsea</div>
+        <div class="medium-text text-truncate">Arsenal</div>
+      </a>
+    </div>
+  </div>
 </div>
 </body></html>
 """
@@ -199,6 +212,37 @@ class TestParseEvents:
     def test_empty_html(self):
         assert _parse_events("<html></html>") == []
 
+    def test_time_parsed_correctly(self):
+        """Time parsed from title attribute: '21 Февраля 18:00' MSK → 15:00 UTC."""
+        events = _parse_events(EVENTS_HTML, cid="42")
+        ev = events[0]  # 21 Feb 18:00 MSK → 15:00 UTC
+        assert ev.start_time_utc.hour == 15
+        assert ev.start_time_utc.minute == 0
+        assert ev.start_time_utc.day == 21
+
+    def test_time_from_row_fallback(self):
+        """When title has no date, time is taken from sibling div + day param."""
+        html = """
+        <html><body>
+        <div class="row align-items-center event-centerbet">
+          <div class="col-6 col-md-1 order-1">
+            <div class="medium-text d-inline-block d-md-block">14:30</div>
+          </div>
+          <div class="col-sm-4">
+            <a class="d-block" href="/event/999-team-a-team-b" title="some title without date">
+              <div class="medium-text">Team A</div>
+              <div class="medium-text">Team B</div>
+            </a>
+          </div>
+        </div>
+        </body></html>
+        """
+        events = _parse_events(html, cid="1", day=0)
+        assert len(events) == 1
+        # 14:30 MSK → 11:30 UTC
+        assert events[0].start_time_utc.hour == 11
+        assert events[0].start_time_utc.minute == 30
+
 
 # ---------------------------------------------------------------------------
 # Tests: _parse_odds
@@ -241,6 +285,32 @@ class TestFindOddsEntry:
         assert entry is not None
         assert entry.cfid == "456"
         assert entry.eid == "123"
+
+    def test_cyrillic_x_matches_latin_x(self):
+        """Kush uses Cyrillic Х (U+0425), our code sends Latin X (U+0058)."""
+        # HTML with Cyrillic Х
+        html = """
+        <button class="coefLink" url="/coupon/add-coupon?eid=1&cfid=99">
+            <div class="d-sm-none">\u0425</div>
+            <span>3.20</span>
+        </button>
+        """
+        # Search with Latin X — should still find it
+        entry = _find_odds_entry(html, "X", 1.0, 10.0)
+        assert entry is not None
+        assert entry.coefficient == 3.20
+
+    def test_cyrillic_1x_matches_latin_1x(self):
+        """1Х (Cyrillic) should match 1X (Latin)."""
+        html = """
+        <button class="coefLink" url="/coupon/add-coupon?eid=1&cfid=88">
+            <div class="d-sm-none">1\u0425</div>
+            <span>1.85</span>
+        </button>
+        """
+        entry = _find_odds_entry(html, "1X", 1.0, 10.0)
+        assert entry is not None
+        assert entry.coefficient == 1.85
 
     def test_entry_repr(self):
         e = OddsEntry("П1", 2.10, "456", "123")

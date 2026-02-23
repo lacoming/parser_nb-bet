@@ -24,6 +24,13 @@ class Match:
     odds_2_end: float | None = None
 
     @property
+    def odds_1x_start(self) -> float | None:
+        """Double chance 1X = min(kf1, kfX) from START odds — used in ratio formula."""
+        if self.odds_1_start is not None and self.odds_x_start is not None:
+            return min(self.odds_1_start, self.odds_x_start)
+        return None
+
+    @property
     def odds_1x_end(self) -> float | None:
         """Double chance 1X = min(kf1, kfX) — used in decision engine."""
         if self.odds_1_end is not None and self.odds_x_end is not None:

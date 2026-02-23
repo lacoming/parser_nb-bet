@@ -220,10 +220,11 @@ class TestE2EDryRun:
         with patch("src.scheduler.cycle_runner.KushSession"), \
              patch("src.scheduler.cycle_runner.KushClient") as MockClient, \
              patch("src.scheduler.cycle_runner.EventMatcher") as MockMatcher, \
-             patch("src.scheduler.cycle_runner.BetPlacer"):
+             patch("src.scheduler.cycle_runner.BetPlacer") as MockPlacer:
 
             MockClient.return_value.get_all_events.return_value = []
             MockMatcher.return_value.find_best_match.return_value = None
+            MockPlacer.return_value.get_threshold.return_value = 1.10
 
             stats = run_cycle(
                 config=config,
@@ -238,6 +239,8 @@ class TestE2EDryRun:
         assert stats.missing >= 1
         assert stats.placed == 0
         telegram.notify_missing.assert_called()
+        # Verify missing rows were added to Excel writer
+        assert excel_writer.missing_count >= 1
 
     def test_full_cycle_league_filtered_out(self, tmp_path):
         """Match league not in settings → filtered out → no Kush call."""
@@ -346,10 +349,11 @@ class TestE2EDryRun:
         with patch("src.scheduler.cycle_runner.KushSession"), \
              patch("src.scheduler.cycle_runner.KushClient") as MockClient, \
              patch("src.scheduler.cycle_runner.EventMatcher") as MockMatcher, \
-             patch("src.scheduler.cycle_runner.BetPlacer"):
+             patch("src.scheduler.cycle_runner.BetPlacer") as MockPlacer:
 
             MockClient.return_value.get_all_events.return_value = []
             MockMatcher.return_value.find_best_match.return_value = None
+            MockPlacer.return_value.get_threshold.return_value = 1.10
 
             run_cycle(
                 config=config, state=state, nb_client=nb_client,

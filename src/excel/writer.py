@@ -11,9 +11,9 @@ from datetime import datetime
 import xlsxwriter
 
 from src.excel.default_mapper import DEFAULT_COLUMNS, get_headers, get_widths
-from src.excel.models import ExcelRow
+from src.excel.models import ExcelRow, MissingRow
 
-log = logging.getLogger(__name__)
+log = logging.getLogger("parser_nb_bet.excel.writer")
 
 
 class ExcelWriter:
@@ -28,18 +28,28 @@ class ExcelWriter:
         self.output_dir = output_dir
         self.sheet_name = sheet_name
         self._rows: list[ExcelRow] = []
+        self._missing_rows: list[MissingRow] = []
 
     @property
     def row_count(self) -> int:
         return len(self._rows)
 
+    @property
+    def missing_count(self) -> int:
+        return len(self._missing_rows)
+
     def add_row(self, row: ExcelRow) -> None:
         """Add a row to the buffer."""
         self._rows.append(row)
 
+    def add_missing_row(self, row: MissingRow) -> None:
+        """Add a missing-match row to the buffer."""
+        self._missing_rows.append(row)
+
     def clear(self) -> None:
-        """Clear the buffer."""
+        """Clear all buffers."""
         self._rows.clear()
+        self._missing_rows.clear()
 
     def _make_filename(self, suffix: str = "") -> str:
         """Generate output filename with date."""
@@ -111,6 +121,33 @@ class ExcelWriter:
                 },
             )
 
+        # --- Second sheet: НЕ НАЙДЕНО (missing matches) ---
+        if self._missing_rows:
+            ws2 = wb.add_worksheet("НЕ НАЙДЕНО")
+            m_headers = MissingRow.headers()
+            m_widths = MissingRow.widths()
+            for i, w in enumerate(m_widths):
+                ws2.set_column(i, i, w)
+            for col, h in enumerate(m_headers):
+                ws2.write(0, col, h, header_fmt)
+            for row_idx, mrow in enumerate(self._missing_rows, start=1):
+                for col, val in enumerate(mrow.as_list()):
+                    ws2.write(row_idx, col, val)
+            last_m = len(self._missing_rows)
+            last_mc = len(m_headers) - 1
+            m_columns = [{"header": h} for h in m_headers]
+            ws2.add_table(
+                0, 0, last_m, last_mc,
+                {
+                    "name": "MissingData",
+                    "style": "Table Style Medium 4",
+                    "columns": m_columns,
+                },
+            )
+
         wb.close()
-        log.info("Excel saved: %s (%d rows)", filepath, len(self._rows))
+        log.info(
+            "Excel saved: %s (%d rows, %d missing)",
+            filepath, len(self._rows), len(self._missing_rows),
+        )
         return filepath

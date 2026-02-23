@@ -12,7 +12,7 @@ from typing import Any
 
 import requests
 
-log = logging.getLogger(__name__)
+log = logging.getLogger("parser_nb_bet.telegram.notifier")
 
 # Telegram Bot API base URL
 _API = "https://api.telegram.org/bot{token}/{method}"
