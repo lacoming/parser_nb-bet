@@ -96,13 +96,17 @@ class BetPlacer:
         Returns:
             BetResult with outcome details.
         """
-        # Step 1: Find matching odds entry
-        odds_entry = self._client.find_odds_entry(
+        # BUG-1 fix: for "1X" bets, ratio uses П1 coefficient (not 1X).
+        # The actual bet is still placed on "1X".
+        ratio_bet_type = "П1" if bet_type_kush == "1X" else bet_type_kush
+
+        # Step 1: Find odds entry for ratio calculation
+        ratio_odds_entry = self._client.find_odds_entry(
             event_id=kush_event_id,
-            bet_type=bet_type_kush,
+            bet_type=ratio_bet_type,
         )
 
-        if odds_entry is None:
+        if ratio_odds_entry is None:
             return BetResult(
                 match_key=match.match_key,
                 event_id=kush_event_id,
@@ -115,21 +119,21 @@ class BetPlacer:
                 placed=False,
                 dry_run=dry_run,
                 success=False,
-                error=f"Odds entry not found for {bet_type_kush}",
+                error=f"Odds entry not found for {ratio_bet_type} (ratio lookup for {bet_type_kush})",
                 league=match.league,
                 team_home=match.team_home,
                 team_away=match.team_away,
             )
 
-        kf_kush = odds_entry.coefficient
+        kf_kush = ratio_odds_entry.coefficient
 
-        # Step 2: Check ratio
+        # Step 2: Check ratio using П1 coefficient for 1X bets
         ratio, threshold, passes = self.check_ratio(kf_kush, kf_nb, match.league, roi=roi)
 
         if not passes:
             log.info(
-                "Ratio check failed: %.3f <= %.2f for %s (%s vs %s)",
-                ratio, threshold, bet_type_kush,
+                "Ratio check failed: %.3f <= %.2f for %s (ratio by %s kf=%.2f) (%s vs %s)",
+                ratio, threshold, bet_type_kush, ratio_bet_type, kf_kush,
                 match.team_home, match.team_away,
             )
             return BetResult(
@@ -153,9 +157,9 @@ class BetPlacer:
         # Step 3: Dry-run or real bet
         if dry_run:
             log.info(
-                "DRY-RUN: Would place %s on %s vs %s (kf=%.2f, ratio=%.3f)",
+                "DRY-RUN: Would place %s on %s vs %s (ratio by %s kf=%.2f, ratio=%.3f)",
                 bet_type_kush, match.team_home, match.team_away,
-                kf_kush, ratio,
+                ratio_bet_type, kf_kush, ratio,
             )
             return BetResult(
                 match_key=match.match_key,
@@ -174,10 +178,37 @@ class BetPlacer:
                 team_away=match.team_away,
             )
 
-        # Step 4: Real bet placement
+        # Step 4: For 1X bets, find the actual 1X odds entry for placement
+        if bet_type_kush != ratio_bet_type:
+            bet_odds_entry = self._client.find_odds_entry(
+                event_id=kush_event_id,
+                bet_type=bet_type_kush,
+            )
+            if bet_odds_entry is None:
+                return BetResult(
+                    match_key=match.match_key,
+                    event_id=kush_event_id,
+                    bet_type=bet_type_kush,
+                    kf_nb=kf_nb,
+                    kf_kush=kf_kush,
+                    ratio=ratio,
+                    threshold=threshold,
+                    ratio_passes=True,
+                    placed=False,
+                    dry_run=False,
+                    success=False,
+                    error=f"Odds entry not found for {bet_type_kush} (bet placement)",
+                    league=match.league,
+                    team_home=match.team_home,
+                    team_away=match.team_away,
+                )
+        else:
+            bet_odds_entry = ratio_odds_entry
+
+        # Step 5: Real bet placement
         return self._place_real_bet(
             match=match,
-            odds_entry=odds_entry,
+            odds_entry=bet_odds_entry,
             kush_event_url=kush_event_url,
             kf_nb=kf_nb,
             ratio=ratio,

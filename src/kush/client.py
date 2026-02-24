@@ -243,9 +243,11 @@ def _extract_event_time(tag: Tag, day: int = 0) -> datetime:
     1. Parse date+time from link's title attribute (e.g. "22 Февраля 17:00")
     2. Parse time from sibling column in the event row (e.g. "17:00")
        and combine with the date derived from the `day` parameter.
-    3. Fallback: datetime.now(UTC)
+    3. Fallback: datetime.now() in MSK frame
 
-    All Kush times are Moscow time (UTC+3).
+    Both NB-Bet and Kush work in Moscow time (MSK).  No UTC conversion is
+    performed — all times are stored as MSK values tagged with UTC tzinfo
+    so that arithmetic and comparison work uniformly across the codebase.
 
     Args:
         tag: The <a class="d-block"> link tag for the event.
@@ -258,8 +260,8 @@ def _extract_event_time(tag: Tag, day: int = 0) -> datetime:
     if title:
         dt = _parse_title_datetime(title)
         if dt is not None:
-            # dt is MSK (naive), convert to UTC
-            return dt.replace(tzinfo=timezone.utc) - MSK_OFFSET
+            # dt is MSK (naive) — keep as-is, tag with UTC for tz-aware ops
+            return dt.replace(tzinfo=timezone.utc)
 
     # --- Strategy 2: find time in sibling column, date from day param ---
     time_str = _find_time_in_row(tag)
@@ -273,11 +275,14 @@ def _extract_event_time(tag: Tag, day: int = 0) -> datetime:
                 target_date.year, target_date.month, target_date.day,
                 int(hh), int(mm),
             )
-            return dt.replace(tzinfo=timezone.utc) - MSK_OFFSET
+            # MSK time — keep as-is, tag with UTC
+            return dt.replace(tzinfo=timezone.utc)
         except (ValueError, TypeError):
             pass
 
-    return datetime.now(timezone.utc)
+    log.warning("_extract_event_time: no time found, using now()")
+    # Fallback: current MSK time (tagged as UTC for consistency)
+    return datetime.now(timezone.utc) + MSK_OFFSET
 
 
 # Russian month names for title parsing

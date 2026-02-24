@@ -213,10 +213,10 @@ class TestParseEvents:
         assert _parse_events("<html></html>") == []
 
     def test_time_parsed_correctly(self):
-        """Time parsed from title attribute: '21 Февраля 18:00' MSK → 15:00 UTC."""
+        """Time parsed from title attribute: '21 Февраля 18:00' MSK — stored as-is."""
         events = _parse_events(EVENTS_HTML, cid="42")
-        ev = events[0]  # 21 Feb 18:00 MSK → 15:00 UTC
-        assert ev.start_time_utc.hour == 15
+        ev = events[0]  # 21 Feb 18:00 MSK — no UTC conversion
+        assert ev.start_time_utc.hour == 18
         assert ev.start_time_utc.minute == 0
         assert ev.start_time_utc.day == 21
 
@@ -239,8 +239,8 @@ class TestParseEvents:
         """
         events = _parse_events(html, cid="1", day=0)
         assert len(events) == 1
-        # 14:30 MSK → 11:30 UTC
-        assert events[0].start_time_utc.hour == 11
+        # 14:30 MSK — stored as-is (no UTC conversion)
+        assert events[0].start_time_utc.hour == 14
         assert events[0].start_time_utc.minute == 30
 
 

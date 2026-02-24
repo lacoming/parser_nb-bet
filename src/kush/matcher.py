@@ -63,6 +63,21 @@ def _extract_kush_slug_teams(url: str) -> tuple[str, str]:
     return (slug.replace("-", " ").strip(), "")
 
 
+def _slug_pair_score(h1: str, a1: str, h2: str, a2: str) -> float:
+    """Compute WRatio similarity between two pairs of slug-extracted team names.
+
+    Returns score in [0, 1].
+    """
+    if fuzz is None:
+        return 0.0
+    home_score = fuzz.WRatio(h1, h2) / 100.0
+    if a1 and a2:
+        away_score = fuzz.WRatio(a1, a2) / 100.0
+        return (home_score + away_score) / 2.0
+    # If one side has no away team, use only home score (penalized)
+    return home_score * 0.7
+
+
 class EventMatcher:
     """Matches NB-Bet Match objects to KushEvent objects."""
 
@@ -134,7 +149,12 @@ class EventMatcher:
         return None
 
     def _score(self, nb_match: Match, event: KushEvent) -> Optional[MatchResult]:
-        """Score a single NB-Kush pair."""
+        """Score a single NB-Kush pair.
+
+        Uses two parallel matching strategies and picks the best:
+        1. Fuzzy match on Russian/original team names (existing)
+        2. Fuzzy match on Latin slugs from URLs (BUG-3)
+        """
         # Time score
         time_score = self._compute_time_score(
             nb_match.start_time_utc, event.start_time_utc
@@ -142,7 +162,7 @@ class EventMatcher:
         if time_score <= 0:
             return None
 
-        # Name score: try both orders (home/away normal and swapped)
+        # --- Strategy 1: fuzzy match on team names (Russian/original) ---
         name_score_normal = self._compute_name_score(
             nb_match.team_home, nb_match.team_away,
             event.team_home, event.team_away,
@@ -159,6 +179,16 @@ class EventMatcher:
             name_score = name_score_normal
             swapped = False
 
+        # --- Strategy 2: fuzzy match on Latin slugs from URLs (BUG-3) ---
+        slug_score, slug_swapped = self._compute_slug_score(nb_match, event)
+        if slug_score > name_score:
+            log.debug(
+                "Slug score %.2f > name score %.2f for %s ↔ eid=%s",
+                slug_score, name_score, nb_match.match_key, event.event_id,
+            )
+            name_score = slug_score
+            swapped = slug_swapped
+
         confidence = name_score * self._name_weight + time_score * self._time_weight
 
         return MatchResult(
@@ -169,6 +199,36 @@ class EventMatcher:
             time_score=time_score,
             swapped=swapped,
         )
+
+    @staticmethod
+    def _compute_slug_score(
+        nb_match: Match, event: KushEvent,
+    ) -> tuple[float, bool]:
+        """Compute name similarity using Latin slugs from URLs.
+
+        Extracts team names from NB slug (e.g. 'al-ahli-vs-al-hilal-prognoz-na-match')
+        and Kush URL (e.g. '/event/12345-al-ahli-al-hilal'), then runs WRatio
+        on the extracted Latin names.
+
+        Returns (score, swapped) tuple.
+        """
+        if fuzz is None:
+            return (0.0, False)
+
+        nb_h, nb_a = _extract_slug_teams(nb_match.nb_slug)
+        ku_h, ku_a = _extract_kush_slug_teams(event.url)
+
+        if not nb_h or not ku_h:
+            return (0.0, False)
+
+        # Normal order
+        score_normal = _slug_pair_score(nb_h, nb_a, ku_h, ku_a)
+        # Swapped order
+        score_swapped = _slug_pair_score(nb_h, nb_a, ku_a, ku_h) if ku_a else 0.0
+
+        if score_swapped > score_normal:
+            return (score_swapped, True)
+        return (score_normal, False)
 
     def _compute_time_score(self, t1: datetime, t2: datetime) -> float:
         """Linear decay: 1.0 at exact match, 0.0 at tolerance boundary."""

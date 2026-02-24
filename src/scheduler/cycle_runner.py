@@ -105,7 +105,9 @@ def run_cycle(
     log.info("League filter: %d -> %d matches", stats.total_matches, stats.filtered)
 
     # 2b. Skip matches >2 days away (Kush only has today+tomorrow)
-    max_date = datetime.now(timezone.utc) + timedelta(days=2)
+    # All times are stored as MSK (tagged UTC), so use MSK "now" for comparison
+    _MSK_OFFSET = timedelta(hours=3)
+    max_date = datetime.now(timezone.utc) + _MSK_OFFSET + timedelta(days=2)
     near_matches = [m for m in filtered if m.start_time_utc <= max_date]
     far_skipped = len(filtered) - len(near_matches)
     if far_skipped:

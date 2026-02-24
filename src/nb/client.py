@@ -182,9 +182,15 @@ def _parse_match(raw: dict, league: str, sport: str) -> Optional[Match]:
     if not timestamp_ms:
         return None
 
-    # Convert timestamp (ms string like "1740000000000") to datetime
+    # Convert timestamp (ms) to MSK datetime.
+    # NB-Bet API returns real UTC timestamps.  We store everything as MSK
+    # (tagged with UTC tzinfo for tz-aware arithmetic) so that NB and Kush
+    # times are directly comparable without conversion.
     ts_sec = int(str(timestamp_ms)[:-3])
-    start_time = datetime.fromtimestamp(ts_sec, tz=timezone.utc)
+    _MSK_OFFSET = timedelta(hours=3)
+    start_time = datetime.fromtimestamp(ts_sec, tz=timezone.utc) + _MSK_OFFSET
+    # Re-tag as UTC (we store MSK value in the UTC slot, same as Kush)
+    start_time = start_time.replace(tzinfo=timezone.utc)
 
     home = raw.get("7", "")
     away = raw.get("15", "")

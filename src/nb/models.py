@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 
 
 @dataclass
@@ -39,7 +39,6 @@ class Match:
 
     @staticmethod
     def make_key(league: str, home: str, away: str, dt: datetime) -> str:
-        # Use MSK date (UTC+3) for key to match Kush's timezone
-        _MSK = timezone(timedelta(hours=3))
-        dt_msk = dt.astimezone(_MSK) if dt.tzinfo else dt.replace(tzinfo=timezone.utc).astimezone(_MSK)
-        return f"{league}|{home}|{away}|{dt_msk.strftime('%Y%m%d')}"
+        # Both NB and Kush work in MSK — timestamps are already in MSK frame
+        # (tagged as UTC for tz-aware arithmetic).  Use date as-is.
+        return f"{league}|{home}|{away}|{dt.strftime('%Y%m%d')}"

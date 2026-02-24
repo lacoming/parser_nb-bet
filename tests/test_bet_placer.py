@@ -447,3 +447,131 @@ class TestEdgeCases:
             # ratio = 3.00 * 1.05 / 2.00 = 1.575 > 1.05 → passes
             assert result.success is True, f"Failed for bet_type={bt}"
             assert result.bet_type == bt
+
+
+# ---------------------------------------------------------------------------
+# BUG-1: 1X ratio must use П1 coefficient
+# ---------------------------------------------------------------------------
+
+class TestBug1_1XRatioByP1:
+    """BUG-1: For '1X' bets, ratio is computed using П1 coefficient, not 1X."""
+
+    def test_1x_dry_run_uses_p1_for_ratio(self):
+        """Verify find_odds_entry is called with 'П1' for 1X bets."""
+        placer, _, client = _make_placer()
+        # П1 coefficient on Kush = 3.00, NB kf1 = 2.00
+        # ratio = 3.00 * 1.05 / 2.00 = 1.575 > 1.05 (EPL threshold)
+        client.find_odds_entry.return_value = _make_odds_entry(
+            bet_type="П1", coefficient=3.00,
+        )
+        match = _make_match(league="EPL")
+
+        result = placer.place_bet(
+            match, "99999", "/event/99999-x", "1X", 2.00, dry_run=True,
+        )
+        # Must call find_odds_entry with "П1" (not "1X")
+        client.find_odds_entry.assert_called_once_with(
+            event_id="99999", bet_type="П1",
+        )
+        assert result.success is True
+        assert result.bet_type == "1X"
+        assert result.kf_kush == 3.00  # П1 coefficient used for ratio
+
+    def test_1x_ratio_uses_p1_kf_not_1x_kf(self):
+        """If 1X kf is low but П1 kf is high enough, ratio should pass."""
+        placer, _, client = _make_placer()
+        # Scenario: П1 kf=2.50, 1X kf=1.52 (which would fail if used)
+        # ratio = 2.50 * 1.05 / 2.10 = 1.25 > 1.05 → passes
+        client.find_odds_entry.return_value = _make_odds_entry(
+            bet_type="П1", coefficient=2.50,
+        )
+        match = _make_match(league="EPL")
+
+        result = placer.place_bet(
+            match, "99999", "/event/99999-x", "1X", 2.10, dry_run=True,
+        )
+        assert result.success is True
+        assert result.kf_kush == 2.50  # П1, not 1X
+
+    def test_1x_ratio_fails_when_p1_too_low(self):
+        """Ratio must fail based on П1 coefficient."""
+        placer, _, client = _make_placer()
+        # П1 kf=1.50, NB kf1=2.10 → ratio = 1.50 * 1.05 / 2.10 = 0.75 < 1.05
+        client.find_odds_entry.return_value = _make_odds_entry(
+            bet_type="П1", coefficient=1.50,
+        )
+        match = _make_match(league="EPL")
+
+        result = placer.place_bet(
+            match, "99999", "/event/99999-x", "1X", 2.10, dry_run=True,
+        )
+        assert result.success is False
+        assert result.ratio_passes is False
+
+    def test_non_1x_still_uses_own_bet_type(self):
+        """Non-1X bet types should still use their own coefficient."""
+        placer, _, client = _make_placer()
+        client.find_odds_entry.return_value = _make_odds_entry(
+            bet_type="П2", coefficient=2.50,
+        )
+        match = _make_match(league="EPL")
+
+        result = placer.place_bet(
+            match, "99999", "/event/99999-x", "П2", 2.10, dry_run=True,
+        )
+        # Must call find_odds_entry with "П2" (not something else)
+        client.find_odds_entry.assert_called_once_with(
+            event_id="99999", bet_type="П2",
+        )
+        assert result.success is True
+
+    def test_1x_real_bet_finds_both_entries(self):
+        """Real 1X bet: ratio by П1, placement by 1X entry."""
+        placer, session, client = _make_placer(
+            kush_config=KushConfig(dry_run=False, login="u", password="p"),
+        )
+        session.logged_in = True
+
+        # find_odds_entry called twice: first "П1" (ratio), then "1X" (placement)
+        p1_entry = _make_odds_entry(bet_type="П1", coefficient=2.50, cfid="cf_p1", eid="99999")
+        x1_entry = _make_odds_entry(bet_type="1X", coefficient=1.60, cfid="cf_1x", eid="99999")
+        client.find_odds_entry.side_effect = [p1_entry, x1_entry]
+
+        # Mock add_coupon + create_coupon
+        add_resp = MagicMock()
+        add_resp.text = '<form action="/coupon/create-coupon"><input name="_csrf" value="t"/></form>'
+        session.get.return_value = add_resp
+        create_resp = MagicMock()
+        create_resp.text = "Прогноз успешно добавлен"
+        session.post.return_value = create_resp
+
+        match = _make_match(league="EPL")
+        result = placer.place_bet(
+            match, "99999", "/event/99999-x", "1X", 2.10, dry_run=False,
+        )
+        assert result.success is True
+        assert result.placed is True
+        # Verify two calls: П1 for ratio, 1X for placement
+        calls = client.find_odds_entry.call_args_list
+        assert len(calls) == 2
+        assert calls[0].kwargs["bet_type"] == "П1"
+        assert calls[1].kwargs["bet_type"] == "1X"
+
+    def test_1x_real_bet_1x_entry_missing(self):
+        """Real 1X bet: ratio passes but 1X entry not found → fail."""
+        placer, session, client = _make_placer(
+            kush_config=KushConfig(dry_run=False, login="u", password="p"),
+        )
+        session.logged_in = True
+
+        p1_entry = _make_odds_entry(bet_type="П1", coefficient=2.50)
+        # П1 found, 1X not found
+        client.find_odds_entry.side_effect = [p1_entry, None]
+
+        match = _make_match(league="EPL")
+        result = placer.place_bet(
+            match, "99999", "/event/99999-x", "1X", 2.10, dry_run=False,
+        )
+        assert result.success is False
+        assert result.ratio_passes is True
+        assert "not found for 1X" in result.error
