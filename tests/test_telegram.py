@@ -150,12 +150,22 @@ class TestNotifyPlaced:
             league="EPL",
             team_home="Arsenal",
             team_away="Chelsea",
+            match_time="19:30",
+            match_date="21.02.2026",
+            odds_1="1.80",
+            odds_x="3.50",
+            odds_2="4.20",
+            link="https://nb-bet.com/match/123",
         )
         assert len(results) == 1
         assert results[0].ok is True
         sent_text = mock_post.call_args[1]["data"]["text"]
-        assert "DRY\\-RUN" in sent_text
+        assert "Kush\\+" in sent_text
+        assert "dry" in sent_text
         assert "Arsenal" in sent_text
+        assert "19:30" in sent_text
+        assert "21\\.02\\.2026" in sent_text
+        assert "1\\.80 \\- 3\\.50 \\- 4\\.20" in sent_text
 
     @patch("src.telegram.notifier.requests.post")
     def test_real_message(self, mock_post):
@@ -169,9 +179,13 @@ class TestNotifyPlaced:
             ratio=1.33,
             threshold=1.10,
             dry_run=False,
+            match_time="20:00",
+            match_date="24.02.2026",
         )
         sent_text = mock_post.call_args[1]["data"]["text"]
-        assert "REAL" in sent_text
+        assert "Kush\\+" in sent_text
+        assert "dry" not in sent_text.lower()
+        assert "1.33" in sent_text
 
 
 # ── notify_missing ───────────────────────────────────────────────────
@@ -187,11 +201,55 @@ class TestNotifyMissing:
             league="La Liga",
             team_home="Barca",
             team_away="Real",
+            match_time="22:00",
+            match_date="01.03.2026",
+            bet_type="1X",
+            odds_1="1.60",
+            odds_x="3.80",
+            odds_2="5.00",
+            link="https://nb-bet.com/match/456",
         )
         assert results[0].ok is True
         sent_text = mock_post.call_args[1]["data"]["text"]
-        assert "Не найден" in sent_text
+        assert "kush\\-off" in sent_text
         assert "Barca" in sent_text
+        assert "22:00" in sent_text
+        assert "1X" in sent_text
+
+
+# ── notify_ratio_rejected ───────────────────────────────────────────
+
+
+class TestNotifyRatioRejected:
+    @patch("src.telegram.notifier.requests.post")
+    def test_ratio_rejected_message(self, mock_post):
+        mock_post.return_value = MagicMock(json=lambda: {"ok": True, "result": {}})
+        n = TelegramNotifier("tok", [100], rate_limit=0)
+        results = n.notify_ratio_rejected(
+            match_key="Bundesliga|Bayern|Dortmund|20260301",
+            bet_type="1",
+            kf_nb=1.40,
+            kf_kush=1.50,
+            ratio=1.05,
+            threshold=1.10,
+            league="Bundesliga",
+            team_home="Bayern",
+            team_away="Dortmund",
+            match_time="18:30",
+            match_date="01.03.2026",
+            odds_1="1.40",
+            odds_x="4.50",
+            odds_2="6.00",
+            link="https://nb-bet.com/match/789",
+        )
+        assert len(results) == 1
+        assert results[0].ok is True
+        sent_text = mock_post.call_args[1]["data"]["text"]
+        assert "ratio\\-off" in sent_text
+        assert "Bayern" in sent_text
+        assert "18:30" in sent_text
+        assert "1.05" in sent_text
+        assert "1.10" in sent_text
 
 
 # ── notify_critical ──────────────────────────────────────────────────

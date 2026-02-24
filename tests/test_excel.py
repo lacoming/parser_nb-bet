@@ -12,7 +12,7 @@ from src.excel.default_mapper import (
     get_headers,
     get_widths,
 )
-from src.excel.models import ExcelRow
+from src.excel.models import ExcelRow, MissingRow, RejectedRow
 from src.excel.writer import ExcelWriter
 
 
@@ -130,8 +130,9 @@ class TestExcelWriter:
     def test_init_defaults(self):
         w = ExcelWriter()
         assert w.output_dir == "output"
-        assert w.sheet_name == "ИГРЫ"
+        assert w.sheet_name == "Проставленные"
         assert w.row_count == 0
+        assert w.rejected_count == 0
 
     def test_add_row(self):
         w = ExcelWriter()
@@ -214,3 +215,79 @@ class TestExcelWriter:
             w.save(filepath=p2)
             assert os.path.exists(p1)
             assert os.path.exists(p2)
+
+    def test_add_rejected_row(self):
+        w = ExcelWriter()
+        w.add_rejected_row(RejectedRow(team_home="Arsenal"))
+        assert w.rejected_count == 1
+
+    def test_clear_clears_all_buffers(self):
+        w = ExcelWriter()
+        w.add_row(ExcelRow())
+        w.add_missing_row(MissingRow())
+        w.add_rejected_row(RejectedRow())
+        assert w.row_count == 1
+        assert w.missing_count == 1
+        assert w.rejected_count == 1
+        w.clear()
+        assert w.row_count == 0
+        assert w.missing_count == 0
+        assert w.rejected_count == 0
+
+    def test_save_three_sheets(self):
+        """Save with all three types creates 3-sheet xlsx."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            w = ExcelWriter(output_dir=tmpdir)
+            w.add_row(ExcelRow(team_home="Arsenal", team_away="Chelsea"))
+            w.add_missing_row(MissingRow(team_home="Liverpool", team_away="Everton"))
+            w.add_rejected_row(RejectedRow(
+                team_home="Bayern", team_away="Dortmund",
+                kf_nb="2.10", kf_kush="2.20", ratio="1.08", threshold="1.10",
+            ))
+            path = w.save()
+            assert os.path.exists(path)
+            # Verify via openpyxl that all 3 sheets exist
+            import openpyxl
+            wb = openpyxl.load_workbook(path)
+            sheet_names = wb.sheetnames
+            assert "Проставленные" in sheet_names
+            assert "Ненайденные" in sheet_names
+            assert "Отклонено" in sheet_names
+            # Verify rejected sheet has data (header + 1 row)
+            ws3 = wb["Отклонено"]
+            assert ws3.max_row == 2  # header + 1 data row
+            wb.close()
+
+
+# ── RejectedRow ─────────────────────────────────────────────────────
+
+
+class TestRejectedRow:
+    def test_defaults_empty(self):
+        row = RejectedRow()
+        assert row.date == ""
+        assert row.kf_kush == ""
+
+    def test_as_list_length(self):
+        row = RejectedRow()
+        assert len(row.as_list()) == 14
+
+    def test_headers_length(self):
+        assert len(RejectedRow.headers()) == 14
+
+    def test_widths_length(self):
+        assert len(RejectedRow.widths()) == 14
+
+    def test_as_list_order(self):
+        row = RejectedRow(
+            date="24.02.2026", time="18:00", league="EPL",
+            team_home="Arsenal", team_away="Chelsea", bet_type="1",
+            kf_nb="2.10", kf_kush="2.20", ratio="1.08", threshold="1.10",
+        )
+        vals = row.as_list()
+        assert vals[0] == "24.02.2026"
+        assert vals[3] == "Arsenal"
+        assert vals[9] == "2.10"
+        assert vals[10] == "2.20"
+        assert vals[11] == "1.08"
+        assert vals[12] == "1.10"

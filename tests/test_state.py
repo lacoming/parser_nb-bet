@@ -75,3 +75,40 @@ class TestAppState:
         assert state.is_expired(entry) is True
         entry.check_count = 2
         assert state.is_expired(entry) is False
+
+
+class TestRatioRejected:
+    def test_record_ratio_rejected(self):
+        state = AppState()
+        state.record_ratio_rejected("key1")
+        assert state.is_ratio_rejected("key1") is True
+        assert state.ratio_rejected_count == 1
+
+    def test_ratio_rejected_not_processed(self):
+        """Ratio-rejected matches are NOT marked as processed → recheck."""
+        state = AppState()
+        state.record_ratio_rejected("key1")
+        assert state.is_processed("key1") is False
+        assert state.is_known("key1") is True
+
+    def test_promote_to_placed(self):
+        state = AppState()
+        state.record_ratio_rejected("key1")
+        assert state.is_ratio_rejected("key1") is True
+        state.promote_to_placed("key1")
+        assert state.is_ratio_rejected("key1") is False
+        assert state.placed_count == 1
+        assert state.is_processed("key1") is True
+
+    def test_ratio_rejected_allows_recheck(self):
+        """A ratio-rejected match should not be blocked by is_processed."""
+        state = AppState()
+        state.record_ratio_rejected("key1")
+        # is_processed returns False → cycle_runner will recheck this match
+        assert state.is_processed("key1") is False
+
+    def test_promote_nonexistent_harmless(self):
+        state = AppState()
+        state.promote_to_placed("key1")
+        assert state.placed_count == 1
+        assert state.is_ratio_rejected("key1") is False

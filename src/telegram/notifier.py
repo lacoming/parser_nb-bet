@@ -149,18 +149,27 @@ class TelegramNotifier:
         league: str = "",
         team_home: str = "",
         team_away: str = "",
+        match_time: str = "",
+        match_date: str = "",
+        odds_1: str = "",
+        odds_x: str = "",
+        odds_2: str = "",
+        link: str = "",
     ) -> list[SendResult]:
         """Notify about a placed (or dry-run) bet."""
-        mode = "DRY\\-RUN" if dry_run else "REAL"
         esc = escape_md2
+        status = "Kush\\+" if not dry_run else "Kush\\+ \\(dry\\)"
         lines = [
-            f"*Ставка \\({mode}\\)*",
-            f"Лига: {esc(league)}",
-            f"Матч: {esc(team_home)} \\- {esc(team_away)}",
-            f"Тип: *{esc(bet_type)}*",
-            f"КфНБ: `{kf_nb:.2f}`  КфКуш: `{kf_kush:.2f}`",
-            f"Ratio: `{ratio:.3f}` / `{threshold:.2f}`",
+            f"*{status}*",
+            f"{esc(match_time)} / {esc(match_date)}",
+            f"{esc(league)}",
+            f"{esc(team_home)} \\- {esc(team_away)}",
+            f"{esc(odds_1)} \\- {esc(odds_x)} \\- {esc(odds_2)}",
+            f"{esc(bet_type)}, КфКуша: `{kf_kush:.2f}`",
+            f"Ratio: `{ratio:.2f}`",
         ]
+        if link:
+            lines.append(esc(link))
         text = "\n".join(lines)
         return self._broadcast(text)
 
@@ -170,15 +179,61 @@ class TelegramNotifier:
         league: str = "",
         team_home: str = "",
         team_away: str = "",
+        match_time: str = "",
+        match_date: str = "",
+        bet_type: str = "",
+        odds_1: str = "",
+        odds_x: str = "",
+        odds_2: str = "",
+        link: str = "",
     ) -> list[SendResult]:
         """Notify that a match is missing on Kush."""
         esc = escape_md2
         lines = [
-            "*Не найден на Куше*",
-            f"Лига: {esc(league)}",
-            f"Матч: {esc(team_home)} \\- {esc(team_away)}",
-            f"Key: `{esc(match_key)}`",
+            "*kush\\-off*",
+            f"{esc(match_time)} / {esc(match_date)}",
+            f"{esc(league)}",
+            f"{esc(team_home)} \\- {esc(team_away)}",
+            f"{esc(odds_1)} \\- {esc(odds_x)} \\- {esc(odds_2)}",
         ]
+        if bet_type:
+            lines.append(f"Ставка: {esc(bet_type)}")
+        if link:
+            lines.append(esc(link))
+        text = "\n".join(lines)
+        return self._broadcast(text)
+
+    def notify_ratio_rejected(
+        self,
+        match_key: str,
+        bet_type: str,
+        kf_nb: float,
+        kf_kush: float,
+        ratio: float,
+        threshold: float,
+        league: str = "",
+        team_home: str = "",
+        team_away: str = "",
+        match_time: str = "",
+        match_date: str = "",
+        odds_1: str = "",
+        odds_x: str = "",
+        odds_2: str = "",
+        link: str = "",
+    ) -> list[SendResult]:
+        """Notify that a match was rejected by ratio threshold."""
+        esc = escape_md2
+        lines = [
+            "*ratio\\-off*",
+            f"{esc(match_time)} / {esc(match_date)}",
+            f"{esc(league)}",
+            f"{esc(team_home)} \\- {esc(team_away)}",
+            f"{esc(odds_1)} \\- {esc(odds_x)} \\- {esc(odds_2)}",
+            f"{esc(bet_type)}, КфКуша: `{kf_kush:.2f}`",
+            f"Ratio: `{ratio:.2f}` \\(порог {threshold:.2f}\\)",
+        ]
+        if link:
+            lines.append(esc(link))
         text = "\n".join(lines)
         return self._broadcast(text)
 

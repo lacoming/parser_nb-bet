@@ -23,6 +23,7 @@ class AppState:
         self._placed: set[str] = set()
         self._known: set[str] = set()
         self._processed: set[str] = set()  # all fully processed (placed/rejected/missing)
+        self._ratio_rejected: set[str] = set()  # ratio-rejected (NOT processed → recheck)
         self._recheck_interval = recheck_interval  # seconds between rechecks
         self._max_checks = max_checks  # max rechecks before expiry
 
@@ -74,6 +75,20 @@ class AppState:
         """Check if a pending entry has exceeded max rechecks."""
         return entry.check_count >= self._max_checks
 
+    def record_ratio_rejected(self, match_key: str) -> None:
+        """Record a match as ratio-rejected. NOT added to processed → will be rechecked."""
+        self._ratio_rejected.add(match_key)
+        self._known.add(match_key)
+
+    def is_ratio_rejected(self, match_key: str) -> bool:
+        """Check if match was previously rejected by ratio."""
+        return match_key in self._ratio_rejected
+
+    def promote_to_placed(self, match_key: str) -> None:
+        """Promote a ratio-rejected match to placed (ratio now passes)."""
+        self._ratio_rejected.discard(match_key)
+        self.record_placed(match_key)
+
     @property
     def pending_count(self) -> int:
         return len(self._pending)
@@ -81,3 +96,7 @@ class AppState:
     @property
     def placed_count(self) -> int:
         return len(self._placed)
+
+    @property
+    def ratio_rejected_count(self) -> int:
+        return len(self._ratio_rejected)

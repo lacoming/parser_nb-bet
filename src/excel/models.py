@@ -133,3 +133,44 @@ class MissingRow:
     @staticmethod
     def widths() -> list[float]:
         return [12, 8, 25, 20, 20, 8, 10, 10, 10, 10, 12, 30]
+
+
+@dataclass
+class RejectedRow:
+    """Row for matches rejected by ratio check (written to 'ОТКЛОНЕНО' sheet)."""
+
+    date: str = ""  # DD.MM.YYYY
+    time: str = ""  # HH:MM
+    league: str = ""
+    team_home: str = ""
+    team_away: str = ""
+    bet_type: str = ""
+    odds_1_start: str = ""
+    odds_x_start: str = ""
+    odds_2_start: str = ""
+    kf_nb: str = ""
+    kf_kush: str = ""
+    ratio: str = ""
+    threshold: str = ""
+    link: str = ""
+
+    def as_list(self) -> list[str]:
+        return [
+            self.date, self.time, self.league,
+            self.team_home, self.team_away, self.bet_type,
+            self.odds_1_start, self.odds_x_start, self.odds_2_start,
+            self.kf_nb, self.kf_kush, self.ratio, self.threshold, self.link,
+        ]
+
+    @staticmethod
+    def headers() -> list[str]:
+        return [
+            "Дата", "Время", "Лига",
+            "Дома", "Гости", "Ставка",
+            "Kf1 старт", "KfX старт", "Kf2 старт",
+            "KfNB", "KfKush", "Ratio", "Порог", "Ссылка",
+        ]
+
+    @staticmethod
+    def widths() -> list[float]:
+        return [12, 8, 25, 20, 20, 8, 10, 10, 10, 10, 10, 10, 10, 30]

@@ -349,6 +349,68 @@ class TestE2EDryRun:
 
         assert state.pending_count >= 1
 
+    def test_ratio_rejected_goes_to_rejected_sheet(self, tmp_path):
+        """Match found on Kush but ratio fails → rejected sheet, not processed."""
+        config = _make_config(str(tmp_path))
+        state = AppState()
+        match = _make_match(kf1=2.10, kf2=3.50, kfx=3.20)
+
+        nb_client = MagicMock()
+        nb_client.get_matches.return_value = [match]
+
+        league_settings = [LeagueSetting(bet_type="1", leagues=["Premier League"])]
+        league_filter = LeagueFilter(settings=league_settings)
+        excel_writer = ExcelWriter(output_dir=str(tmp_path))
+        telegram = MagicMock(spec=TelegramNotifier)
+
+        kush_event = _make_kush_event()
+
+        with patch("src.scheduler.cycle_runner.KushSession"), \
+             patch("src.scheduler.cycle_runner.KushClient") as MockClient, \
+             patch("src.scheduler.cycle_runner.EventMatcher") as MockMatcher, \
+             patch("src.scheduler.cycle_runner.BetPlacer") as MockPlacer:
+
+            MockClient.return_value.get_all_events.return_value = [kush_event]
+
+            from src.kush.models import MatchResult
+            MockMatcher.return_value.find_best_match.return_value = MatchResult(
+                nb_match_key=match.match_key,
+                kush_event=kush_event,
+                confidence=0.95,
+                name_score=0.98,
+                time_score=0.90,
+            )
+
+            # BetPlacer returns ratio failure
+            from src.kush.bet_result import BetResult
+            MockPlacer.return_value.place_bet.return_value = BetResult(
+                match_key=match.match_key,
+                event_id="99001",
+                bet_type="П1",
+                kf_nb=2.00,
+                kf_kush=2.10,
+                ratio=1.05,  # below threshold
+                threshold=1.10,
+                ratio_passes=False,
+                placed=False,
+                dry_run=True,
+                success=False,
+            )
+
+            stats = run_cycle(
+                config=config, state=state, nb_client=nb_client,
+                league_filter=league_filter,
+                excel_writer=excel_writer, telegram=telegram,
+            )
+
+        assert stats.rejected == 1
+        assert stats.placed == 0
+        assert excel_writer.rejected_count == 1
+        assert excel_writer.row_count == 0
+        # Match is NOT processed → can be rechecked
+        assert not state.is_processed(match.match_key)
+        assert state.is_ratio_rejected(match.match_key)
+
     def test_skip_equal_odds_with_relation_condition(self, tmp_path):
         """When kf1 == kf2 and setting requires kf1>kf2, match is skipped."""
         config = _make_config(str(tmp_path))

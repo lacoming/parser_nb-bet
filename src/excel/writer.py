@@ -11,7 +11,7 @@ from datetime import datetime
 import xlsxwriter
 
 from src.excel.default_mapper import DEFAULT_COLUMNS, get_headers, get_widths
-from src.excel.models import ExcelRow, MissingRow
+from src.excel.models import ExcelRow, MissingRow, RejectedRow
 
 log = logging.getLogger("parser_nb_bet.excel.writer")
 
@@ -21,14 +21,15 @@ class ExcelWriter:
 
     Args:
         output_dir: Directory where .xlsx files are saved.
-        sheet_name: Worksheet name (default "ИГРЫ").
+        sheet_name: Worksheet name (default "Проставленные").
     """
 
-    def __init__(self, output_dir: str = "output", sheet_name: str = "ИГРЫ") -> None:
+    def __init__(self, output_dir: str = "output", sheet_name: str = "Проставленные") -> None:
         self.output_dir = output_dir
         self.sheet_name = sheet_name
         self._rows: list[ExcelRow] = []
         self._missing_rows: list[MissingRow] = []
+        self._rejected_rows: list[RejectedRow] = []
 
     @property
     def row_count(self) -> int:
@@ -38,6 +39,10 @@ class ExcelWriter:
     def missing_count(self) -> int:
         return len(self._missing_rows)
 
+    @property
+    def rejected_count(self) -> int:
+        return len(self._rejected_rows)
+
     def add_row(self, row: ExcelRow) -> None:
         """Add a row to the buffer."""
         self._rows.append(row)
@@ -46,10 +51,15 @@ class ExcelWriter:
         """Add a missing-match row to the buffer."""
         self._missing_rows.append(row)
 
+    def add_rejected_row(self, row: RejectedRow) -> None:
+        """Add a ratio-rejected row to the buffer."""
+        self._rejected_rows.append(row)
+
     def clear(self) -> None:
         """Clear all buffers."""
         self._rows.clear()
         self._missing_rows.clear()
+        self._rejected_rows.clear()
 
     def _make_filename(self, suffix: str = "") -> str:
         """Generate output filename with date."""
@@ -121,9 +131,9 @@ class ExcelWriter:
                 },
             )
 
-        # --- Second sheet: НЕ НАЙДЕНО (missing matches) ---
+        # --- Second sheet: Ненайденные (missing matches) ---
         if self._missing_rows:
-            ws2 = wb.add_worksheet("НЕ НАЙДЕНО")
+            ws2 = wb.add_worksheet("Ненайденные")
             m_headers = MissingRow.headers()
             m_widths = MissingRow.widths()
             for i, w in enumerate(m_widths):
@@ -145,9 +155,34 @@ class ExcelWriter:
                 },
             )
 
+        # --- Third sheet: ОТКЛОНЕНО (ratio-rejected matches) ---
+        if self._rejected_rows:
+            ws3 = wb.add_worksheet("Отклонено")
+            r_headers = RejectedRow.headers()
+            r_widths = RejectedRow.widths()
+            for i, w in enumerate(r_widths):
+                ws3.set_column(i, i, w)
+            for col, h in enumerate(r_headers):
+                ws3.write(0, col, h, header_fmt)
+            for row_idx, rrow in enumerate(self._rejected_rows, start=1):
+                for col, val in enumerate(rrow.as_list()):
+                    ws3.write(row_idx, col, val)
+            last_r = len(self._rejected_rows)
+            last_rc = len(r_headers) - 1
+            r_columns = [{"header": h} for h in r_headers]
+            ws3.add_table(
+                0, 0, last_r, last_rc,
+                {
+                    "name": "RejectedData",
+                    "style": "Table Style Medium 5",
+                    "columns": r_columns,
+                },
+            )
+
         wb.close()
         log.info(
-            "Excel saved: %s (%d rows, %d missing)",
+            "Excel saved: %s (%d rows, %d missing, %d rejected)",
             filepath, len(self._rows), len(self._missing_rows),
+            len(self._rejected_rows),
         )
         return filepath

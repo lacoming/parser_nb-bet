@@ -11,7 +11,7 @@ from typing import Optional
 from src.config.schema import AppConfig
 from src.decision.league_filter import LeagueFilter
 from src.decision.models import BetDecision
-from src.excel.models import ExcelRow, MissingRow
+from src.excel.models import ExcelRow, MissingRow, RejectedRow
 from src.excel.writer import ExcelWriter
 from src.kush.bet_placer import BetPlacer
 from src.kush.client import KushClient
@@ -48,6 +48,7 @@ class CycleStats:
         self.matched = 0
         self.placed = 0
         self.missing = 0
+        self.rejected = 0
         self.errors = 0
 
 
@@ -203,6 +204,13 @@ def run_cycle(
                     league=match.league,
                     team_home=match.team_home,
                     team_away=match.team_away,
+                    match_time=match.start_time_utc.strftime("%H:%M"),
+                    match_date=match.start_time_utc.strftime("%d.%m.%Y"),
+                    bet_type=decision.bet_type,
+                    odds_1=f"{match.odds_1_start:.2f}" if match.odds_1_start else "",
+                    odds_x=f"{match.odds_x_start:.2f}" if match.odds_x_start else "",
+                    odds_2=f"{match.odds_2_start:.2f}" if match.odds_2_start else "",
+                    link=match.nb_slug,
                 )
             kf_nb = _get_kf_nb(match, decision.bet_type)
             threshold = bet_placer.get_threshold(match.league)
@@ -249,7 +257,11 @@ def run_cycle(
             )
             if bet_result.success:
                 stats.placed += 1
-                state.record_placed(match.match_key)
+                # If previously ratio-rejected, promote; otherwise record placed
+                if state.is_ratio_rejected(match.match_key):
+                    state.promote_to_placed(match.match_key)
+                else:
+                    state.record_placed(match.match_key)
 
                 row = _match_to_excel_row(match)
                 row.bet_type = bet_result.bet_type
@@ -268,6 +280,53 @@ def run_cycle(
                     league=match.league,
                     team_home=match.team_home,
                     team_away=match.team_away,
+                    match_time=match.start_time_utc.strftime("%H:%M"),
+                    match_date=match.start_time_utc.strftime("%d.%m.%Y"),
+                    odds_1=f"{match.odds_1_start:.2f}" if match.odds_1_start else "",
+                    odds_x=f"{match.odds_x_start:.2f}" if match.odds_x_start else "",
+                    odds_2=f"{match.odds_2_start:.2f}" if match.odds_2_start else "",
+                    link=match.nb_slug,
+                )
+            elif not bet_result.ratio_passes and bet_result.kf_kush > 0:
+                # Ratio-rejected: record for recheck, write to rejected sheet
+                stats.rejected += 1
+                state.record_ratio_rejected(match.match_key)
+                excel_writer.add_rejected_row(RejectedRow(
+                    date=match.start_time_utc.strftime("%d.%m.%Y"),
+                    time=match.start_time_utc.strftime("%H:%M"),
+                    league=match.league,
+                    team_home=match.team_home,
+                    team_away=match.team_away,
+                    bet_type=bet_result.bet_type,
+                    odds_1_start=f"{match.odds_1_start:.2f}" if match.odds_1_start else "",
+                    odds_x_start=f"{match.odds_x_start:.2f}" if match.odds_x_start else "",
+                    odds_2_start=f"{match.odds_2_start:.2f}" if match.odds_2_start else "",
+                    kf_nb=f"{bet_result.kf_nb:.2f}",
+                    kf_kush=f"{bet_result.kf_kush:.2f}",
+                    ratio=f"{bet_result.ratio:.3f}",
+                    threshold=f"{bet_result.threshold:.2f}",
+                    link=match.nb_slug,
+                ))
+                telegram.notify_ratio_rejected(
+                    match_key=match.match_key,
+                    bet_type=bet_result.bet_type,
+                    kf_nb=bet_result.kf_nb,
+                    kf_kush=bet_result.kf_kush,
+                    ratio=bet_result.ratio,
+                    threshold=bet_result.threshold,
+                    league=match.league,
+                    team_home=match.team_home,
+                    team_away=match.team_away,
+                    match_time=match.start_time_utc.strftime("%H:%M"),
+                    match_date=match.start_time_utc.strftime("%d.%m.%Y"),
+                    odds_1=f"{match.odds_1_start:.2f}" if match.odds_1_start else "",
+                    odds_x=f"{match.odds_x_start:.2f}" if match.odds_x_start else "",
+                    odds_2=f"{match.odds_2_start:.2f}" if match.odds_2_start else "",
+                    link=match.nb_slug,
+                )
+                log.info(
+                    "Ratio rejected: %s ratio=%.3f threshold=%.2f",
+                    match.match_key, bet_result.ratio, bet_result.threshold,
                 )
             else:
                 log.warning("Bet failed: %s", bet_result.summary)
@@ -277,7 +336,7 @@ def run_cycle(
             stats.errors += 1
 
     # 6. Save Excel (if any placed bets or missing matches)
-    if excel_writer.row_count > 0 or excel_writer.missing_count > 0:
+    if excel_writer.row_count > 0 or excel_writer.missing_count > 0 or excel_writer.rejected_count > 0:
         try:
             path = excel_writer.save()
             telegram.send_document(path, caption="Результаты цикла")
@@ -298,13 +357,15 @@ def run_cycle(
     )
 
     log.info(
-        "Cycle done: %d total, %d filtered, %d decided, %d matched, %d placed, %d missing, %d errors",
+        "Cycle done: %d total, %d filtered, %d decided, %d matched, "
+        "%d placed, %d missing, %d rejected, %d errors",
         stats.total_matches,
         stats.filtered,
         stats.decided,
         stats.matched,
         stats.placed,
         stats.missing,
+        stats.rejected,
         stats.errors,
     )
 
