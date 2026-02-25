@@ -260,7 +260,7 @@ class TelegramNotifier:
             f"{esc(team_home)} \\- {esc(team_away)}",
             f"{esc(odds_1)} \\- {esc(odds_x)} \\- {esc(odds_2)}",
             f"{esc(bet_type)}, КфКуша: `{kf_kush:.2f}`",
-            f"Ratio: `{ratio:.2f}` \\(порог {threshold:.2f}\\)",
+            f"Ratio: `{ratio:.2f}` \\(порог `{threshold:.2f}`\\)",
         ]
         if link:
             lines.append(esc(link))
