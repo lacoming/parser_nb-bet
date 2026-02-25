@@ -203,6 +203,36 @@ class TelegramNotifier:
         text = "\n".join(lines)
         return self._broadcast(text)
 
+    def notify_pending(
+        self,
+        match_key: str,
+        league: str = "",
+        team_home: str = "",
+        team_away: str = "",
+        match_time: str = "",
+        match_date: str = "",
+        bet_type: str = "",
+        odds_1: str = "",
+        odds_x: str = "",
+        odds_2: str = "",
+        link: str = "",
+    ) -> list[SendResult]:
+        """Notify that a match is pending (far-future, awaiting Kush window)."""
+        esc = escape_md2
+        lines = [
+            "*ожидает*",
+            f"{esc(match_time)} / {esc(match_date)}",
+            f"{esc(league)}",
+            f"{esc(team_home)} \\- {esc(team_away)}",
+            f"{esc(odds_1)} \\- {esc(odds_x)} \\- {esc(odds_2)}",
+        ]
+        if bet_type:
+            lines.append(f"Ставка: {esc(bet_type)}")
+        if link:
+            lines.append(esc(link))
+        text = "\n".join(lines)
+        return self._broadcast(text)
+
     def notify_ratio_rejected(
         self,
         match_key: str,
@@ -253,6 +283,8 @@ class TelegramNotifier:
         missing: int,
         errors: int,
         dry_run: bool,
+        pending: int = 0,
+        rejected: int = 0,
     ) -> list[SendResult]:
         """Notify with a summary of one cycle run."""
         mode = "DRY\\-RUN" if dry_run else "LIVE"
@@ -264,6 +296,8 @@ class TelegramNotifier:
             f"Найдено на Куше: `{matched}`",
             f"Ставки: `{placed}`",
             f"Не найдено: `{missing}`",
+            f"Ожидают: `{pending}`",
+            f"Отклонено: `{rejected}`",
             f"Ошибки: `{errors}`",
         ]
         text = "\n".join(lines)

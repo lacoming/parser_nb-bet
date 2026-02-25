@@ -438,6 +438,137 @@ class TestE2EDryRun:
         assert stats.placed == 0
 
 
+class TestFarFuturePending:
+    """Far-future matches (beyond Kush window) should go to pending sheet + TG."""
+
+    def test_far_future_produces_pending_rows(self, tmp_path):
+        """Matches beyond Kush's 3-day window produce pending rows, not missing."""
+        config = _make_config(str(tmp_path))
+        state = AppState()
+        # Create a match 10 days in the future — well beyond Kush window
+        from datetime import timedelta
+        far_dt = datetime(2026, 3, 10, 15, 0, tzinfo=timezone.utc)
+        far_match = Match(
+            match_key=Match.make_key("La Liga", "Barcelona", "Sevilla", far_dt),
+            league="La Liga",
+            team_home="Barcelona",
+            team_away="Sevilla",
+            start_time_utc=far_dt,
+            nb_slug="barca-sevilla-123",
+            sport="soccer",
+            odds_1_start=1.80,
+            odds_x_start=3.50,
+            odds_2_start=4.20,
+            odds_1_end=1.85,
+            odds_x_end=3.40,
+            odds_2_end=4.10,
+        )
+
+        nb_client = MagicMock()
+        nb_client.get_matches.return_value = [far_match]
+
+        league_settings = [LeagueSetting(bet_type="1", leagues=["La Liga"])]
+        league_filter = LeagueFilter(settings=league_settings)
+        excel_writer = ExcelWriter(output_dir=str(tmp_path))
+        telegram = MagicMock(spec=TelegramNotifier)
+
+        stats = run_cycle(
+            config=config,
+            state=state,
+            nb_client=nb_client,
+            league_filter=league_filter,
+            excel_writer=excel_writer,
+            telegram=telegram,
+        )
+
+        # Should be pending, not missing or placed
+        assert stats.pending == 1
+        assert stats.missing == 0
+        assert stats.placed == 0
+        assert excel_writer.pending_count == 1
+        # TG notify_pending was called (first time = new)
+        telegram.notify_pending.assert_called_once()
+        # Link should be a full URL, not a raw slug
+        call_kwargs = telegram.notify_pending.call_args
+        link = call_kwargs[1]["link"] if "link" in call_kwargs[1] else call_kwargs.kwargs.get("link", "")
+        assert "https://nb-bet.com/soccer/" in link
+
+    def test_far_future_dedup_across_cycles(self, tmp_path):
+        """Second cycle with same far-future match should not re-send TG."""
+        config = _make_config(str(tmp_path))
+        state = AppState()
+        far_dt = datetime(2026, 3, 10, 15, 0, tzinfo=timezone.utc)
+        far_match = Match(
+            match_key=Match.make_key("La Liga", "Barcelona", "Sevilla", far_dt),
+            league="La Liga",
+            team_home="Barcelona",
+            team_away="Sevilla",
+            start_time_utc=far_dt,
+            nb_slug="barca-sevilla-123",
+            sport="soccer",
+            odds_1_start=1.80, odds_x_start=3.50, odds_2_start=4.20,
+            odds_1_end=1.85, odds_x_end=3.40, odds_2_end=4.10,
+        )
+
+        nb_client = MagicMock()
+        nb_client.get_matches.return_value = [far_match]
+
+        league_settings = [LeagueSetting(bet_type="1", leagues=["La Liga"])]
+        league_filter = LeagueFilter(settings=league_settings)
+        telegram = MagicMock(spec=TelegramNotifier)
+
+        # First cycle
+        excel_writer = ExcelWriter(output_dir=str(tmp_path))
+        run_cycle(config=config, state=state, nb_client=nb_client,
+                  league_filter=league_filter, excel_writer=excel_writer, telegram=telegram)
+        assert telegram.notify_pending.call_count == 1
+
+        # Second cycle with same match
+        telegram.reset_mock()
+        excel_writer2 = ExcelWriter(output_dir=str(tmp_path))
+        stats2 = run_cycle(config=config, state=state, nb_client=nb_client,
+                           league_filter=league_filter, excel_writer=excel_writer2, telegram=telegram)
+        # Pending rows still written to Excel (refreshed each cycle)
+        assert stats2.pending == 1
+        assert excel_writer2.pending_count == 1
+        # But TG not called again (dedup)
+        telegram.notify_pending.assert_not_called()
+
+    def test_link_is_full_url_not_slug(self, tmp_path):
+        """Verify that placed/missing/rejected rows use nb_url, not raw slug."""
+        config = _make_config(str(tmp_path))
+        state = AppState()
+        match = _make_match(kf1=2.10, kf2=3.50, kfx=3.20)
+        # match.nb_slug is "arsenal-chelsea-123", nb_url should be full URL
+
+        nb_client = MagicMock()
+        nb_client.get_matches.return_value = [match]
+
+        league_settings = [LeagueSetting(bet_type="1", leagues=["Premier League"])]
+        league_filter = LeagueFilter(settings=league_settings)
+        excel_writer = ExcelWriter(output_dir=str(tmp_path))
+        telegram = MagicMock(spec=TelegramNotifier)
+
+        with patch("src.scheduler.cycle_runner.KushSession"), \
+             patch("src.scheduler.cycle_runner.KushClient") as MockClient, \
+             patch("src.scheduler.cycle_runner.EventMatcher") as MockMatcher, \
+             patch("src.scheduler.cycle_runner.BetPlacer") as MockPlacer:
+
+            MockClient.return_value.get_all_events.return_value = []
+            MockMatcher.return_value.find_best_match.return_value = None
+            MockPlacer.return_value.get_threshold.return_value = 1.10
+
+            run_cycle(config=config, state=state, nb_client=nb_client,
+                      league_filter=league_filter, excel_writer=excel_writer, telegram=telegram)
+
+        # Missing row link should be full URL
+        assert excel_writer.missing_count >= 1
+        # Check the notify_missing call has a full URL
+        call_kwargs = telegram.notify_missing.call_args
+        link = call_kwargs[1].get("link", "") if call_kwargs[1] else ""
+        assert link.startswith("https://nb-bet.com/")
+
+
 class TestPathsModule:
     """Tests for the frozen path resolver."""
 

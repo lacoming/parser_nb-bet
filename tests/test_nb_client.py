@@ -69,6 +69,30 @@ class TestMatchModel:
         )
         assert m.odds_1x_end == 3.20
 
+    def test_nb_url_soccer(self):
+        m = Match(
+            match_key="k", league="L", team_home="A", team_away="B",
+            start_time_utc=datetime.now(timezone.utc),
+            nb_slug="arsenal-chelsea-123", sport="soccer",
+        )
+        assert m.nb_url == "https://nb-bet.com/soccer/arsenal-chelsea-123"
+
+    def test_nb_url_hockey(self):
+        m = Match(
+            match_key="k", league="L", team_home="A", team_away="B",
+            start_time_utc=datetime.now(timezone.utc),
+            nb_slug="cska-dynamo-456", sport="hockey",
+        )
+        assert m.nb_url == "https://nb-bet.com/hockey/cska-dynamo-456"
+
+    def test_nb_url_empty_slug(self):
+        m = Match(
+            match_key="k", league="L", team_home="A", team_away="B",
+            start_time_utc=datetime.now(timezone.utc),
+            nb_slug="", sport="soccer",
+        )
+        assert m.nb_url == ""
+
 
 # ─── Parse response tests ──────────────────────────────────────────────
 

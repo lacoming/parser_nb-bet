@@ -112,3 +112,26 @@ class TestRatioRejected:
         state.promote_to_placed("key1")
         assert state.placed_count == 1
         assert state.is_ratio_rejected("key1") is False
+
+
+class TestFarPending:
+    def test_record_far_pending_new(self):
+        state = AppState()
+        assert state.record_far_pending("key1") is True
+
+    def test_record_far_pending_duplicate(self):
+        state = AppState()
+        state.record_far_pending("key1")
+        assert state.record_far_pending("key1") is False
+
+    def test_far_pending_not_processed(self):
+        """Far-pending matches must NOT be marked as processed."""
+        state = AppState()
+        state.record_far_pending("key1")
+        assert state.is_processed("key1") is False
+
+    def test_far_pending_not_known(self):
+        """Far-pending matches are not in _known set (they have their own set)."""
+        state = AppState()
+        state.record_far_pending("key1")
+        assert state.is_known("key1") is False

@@ -11,7 +11,7 @@ from typing import Optional
 from src.config.schema import AppConfig
 from src.decision.league_filter import LeagueFilter
 from src.decision.models import BetDecision
-from src.excel.models import ExcelRow, MissingRow, RejectedRow
+from src.excel.models import ExcelRow, MissingRow, PendingRow, RejectedRow
 from src.excel.writer import ExcelWriter
 from src.kush.bet_placer import BetPlacer
 from src.kush.client import KushClient
@@ -49,7 +49,16 @@ class CycleStats:
         self.placed = 0
         self.missing = 0
         self.rejected = 0
+        self.pending = 0
         self.errors = 0
+
+
+def _get_default_threshold(config: AppConfig, league: str) -> float:
+    """Return ratio threshold for a league (big or default), without BetPlacer."""
+    for big in config.thresholds.big_leagues:
+        if big.lower() in league.lower():
+            return config.thresholds.big_league_ratio
+    return config.thresholds.default_ratio
 
 
 def _match_to_excel_row(match: Match) -> ExcelRow:
@@ -66,7 +75,7 @@ def _match_to_excel_row(match: Match) -> ExcelRow:
         odds_x_end=f"{match.odds_x_end:.2f}" if match.odds_x_end else "",
         odds_2_start=f"{match.odds_2_start:.2f}" if match.odds_2_start else "",
         odds_2_end=f"{match.odds_2_end:.2f}" if match.odds_2_end else "",
-        link=match.nb_slug,
+        link=match.nb_url,
     )
 
 
@@ -105,14 +114,66 @@ def run_cycle(
     stats.filtered = len(filtered)
     log.info("League filter: %d -> %d matches", stats.total_matches, stats.filtered)
 
-    # 2b. Skip matches >2 days away (Kush only has today+tomorrow)
-    # All times are stored as MSK (tagged UTC), so use MSK "now" for comparison
+    # 2b. Skip matches outside Kush's window (day 0/1/2 = up to 3 calendar days)
+    # Kush serves day=0 (today), day=1 (tomorrow), day=2 (day after).
+    # Filter NB matches to end-of-day+2 MSK to avoid false kush-off alerts.
     _MSK_OFFSET = timedelta(hours=3)
-    max_date = datetime.now(timezone.utc) + _MSK_OFFSET + timedelta(days=2)
-    near_matches = [m for m in filtered if m.start_time_utc <= max_date]
-    far_skipped = len(filtered) - len(near_matches)
-    if far_skipped:
-        log.info("Skipped %d matches >2 days away (not on Kush yet)", far_skipped)
+    now_msk = datetime.now(timezone.utc) + _MSK_OFFSET
+    kush_max_date = now_msk.replace(
+        hour=23, minute=59, second=59, microsecond=0,
+    ) + timedelta(days=2)
+    near_matches = [m for m in filtered if m.start_time_utc <= kush_max_date]
+    far_matches = [m for m in filtered if m.start_time_utc > kush_max_date]
+    if far_matches:
+        log.info(
+            "%d matches beyond Kush window (after %s MSK) → pending sheet",
+            len(far_matches),
+            kush_max_date.strftime("%d.%m %H:%M"),
+        )
+
+    # 2b-2. Process far-future matches through decision engine → pending sheet + TG
+    for far_match in far_matches:
+        setting = league_filter.find_setting(far_match)
+        if not setting:
+            continue
+        if not setting.check(far_match.odds_1_end, far_match.odds_2_end):
+            continue
+        target_bet_type = setting.bet_type
+        league_roi = setting.roi
+        kf_nb = _get_kf_nb(far_match, target_bet_type)
+        threshold = _get_default_threshold(config, far_match.league)
+        effective_roi = league_roi if league_roi else config.thresholds.roi
+        min_kf = (threshold * kf_nb / (1 + effective_roi)) if kf_nb and kf_nb > 0 else 0.0
+        excel_writer.add_pending_row(PendingRow(
+            date=far_match.start_time_utc.strftime("%d.%m.%Y"),
+            time=far_match.start_time_utc.strftime("%H:%M"),
+            league=far_match.league,
+            team_home=far_match.team_home,
+            team_away=far_match.team_away,
+            bet_type=target_bet_type,
+            odds_1_start=f"{far_match.odds_1_start:.2f}" if far_match.odds_1_start else "",
+            odds_x_start=f"{far_match.odds_x_start:.2f}" if far_match.odds_x_start else "",
+            odds_2_start=f"{far_match.odds_2_start:.2f}" if far_match.odds_2_start else "",
+            kf_nb=f"{kf_nb:.2f}" if kf_nb else "",
+            min_kf_kush=f"{min_kf:.2f}" if min_kf else "",
+            link=far_match.nb_url,
+        ))
+        stats.pending += 1
+        # TG notification only for newly seen far-future matches (dedup across cycles)
+        if state.record_far_pending(far_match.match_key):
+            telegram.notify_pending(
+                match_key=far_match.match_key,
+                league=far_match.league,
+                team_home=far_match.team_home,
+                team_away=far_match.team_away,
+                match_time=far_match.start_time_utc.strftime("%H:%M"),
+                match_date=far_match.start_time_utc.strftime("%d.%m.%Y"),
+                bet_type=target_bet_type,
+                odds_1=f"{far_match.odds_1_start:.2f}" if far_match.odds_1_start else "",
+                odds_x=f"{far_match.odds_x_start:.2f}" if far_match.odds_x_start else "",
+                odds_2=f"{far_match.odds_2_start:.2f}" if far_match.odds_2_start else "",
+                link=far_match.nb_url,
+            )
 
     # 2c. Skip already-processed matches (Bug 3 fix)
     new_matches = [m for m in near_matches if not state.is_processed(m.match_key)]
@@ -147,7 +208,15 @@ def run_cycle(
     log.info("Decision engine: %d matches with passing bets", stats.decided)
 
     if not passing:
-        log.info("No passing decisions, cycle complete")
+        log.info("No passing decisions for near-window matches")
+        # Still save Excel if pending rows exist from far-future processing
+        if excel_writer.pending_count > 0:
+            try:
+                path = excel_writer.save()
+                telegram.send_document(path, caption="Результаты цикла")
+            except Exception:
+                log.exception("Failed to save Excel")
+                stats.errors += 1
         telegram.notify_cycle_summary(
             total_matches=stats.total_matches,
             filtered=stats.filtered,
@@ -157,6 +226,8 @@ def run_cycle(
             missing=0,
             errors=stats.errors,
             dry_run=config.kush.dry_run,
+            pending=stats.pending,
+            rejected=stats.rejected,
         )
         return stats
 
@@ -168,11 +239,14 @@ def run_cycle(
         )
         kush_session.init_csrf()
         kush_client = KushClient(kush_session)
-        # Fetch events for today and tomorrow (Kush only has 2 days)
+        # Fetch events for today + tomorrow + day after (Kush serves up to 3 days)
         all_events = kush_client.get_all_events(day=0)
-        events_tomorrow = kush_client.get_all_events(day=1)
-        all_events.extend(events_tomorrow)
-        log.info("Fetched %d Kush events (today+tomorrow)", len(all_events))
+        for extra_day in (1, 2):
+            extra = kush_client.get_all_events(day=extra_day)
+            if not extra:
+                break
+            all_events.extend(extra)
+        log.info("Fetched %d Kush events (day 0-2)", len(all_events))
     except Exception:
         log.exception("Failed to connect to Kush")
         stats.errors += 1
@@ -194,6 +268,13 @@ def run_cycle(
     # 5. Match and place bets (one bet type per match)
     for match, decision, league_roi in passing:
         kush_league = league_filter.get_kush_league(match.league)
+        log.info(
+            "Matching: %s | NB time=%s | kush_league=%s | kush_events=%d",
+            match.match_key,
+            match.start_time_utc.strftime("%H:%M %d.%m.%Y"),
+            kush_league or "(no mapping)",
+            len(all_events),
+        )
         result = matcher.find_best_match(match, all_events, kush_league_name=kush_league)
 
         if result is None:
@@ -210,7 +291,7 @@ def run_cycle(
                     odds_1=f"{match.odds_1_start:.2f}" if match.odds_1_start else "",
                     odds_x=f"{match.odds_x_start:.2f}" if match.odds_x_start else "",
                     odds_2=f"{match.odds_2_start:.2f}" if match.odds_2_start else "",
-                    link=match.nb_slug,
+                    link=match.nb_url,
                 )
             kf_nb = _get_kf_nb(match, decision.bet_type)
             threshold = bet_placer.get_threshold(match.league)
@@ -228,13 +309,16 @@ def run_cycle(
                 odds_2_start=f"{match.odds_2_start:.2f}" if match.odds_2_start else "",
                 kf_nb=f"{kf_nb:.2f}" if kf_nb else "",
                 min_kf_kush=f"{min_kf:.2f}" if min_kf else "",
-                link=match.nb_slug,
+                link=match.nb_url,
             ))
-            state.record_processed(match.match_key)
+            # NOT record_processed — missing matches must be rechecked next cycle
             continue
 
         stats.matched += 1
         kush_event = result.kush_event
+
+        # If previously missing (pending), remove from pending queue
+        state.remove_pending(match.match_key)
 
         try:
             # Determine which NB odds to use for ratio
@@ -285,7 +369,7 @@ def run_cycle(
                     odds_1=f"{match.odds_1_start:.2f}" if match.odds_1_start else "",
                     odds_x=f"{match.odds_x_start:.2f}" if match.odds_x_start else "",
                     odds_2=f"{match.odds_2_start:.2f}" if match.odds_2_start else "",
-                    link=match.nb_slug,
+                    link=match.nb_url,
                 )
             elif not bet_result.ratio_passes and bet_result.kf_kush > 0:
                 # Ratio-rejected: record for recheck, write to rejected sheet
@@ -305,7 +389,7 @@ def run_cycle(
                     kf_kush=f"{bet_result.kf_kush:.2f}",
                     ratio=f"{bet_result.ratio:.3f}",
                     threshold=f"{bet_result.threshold:.2f}",
-                    link=match.nb_slug,
+                    link=match.nb_url,
                 ))
                 telegram.notify_ratio_rejected(
                     match_key=match.match_key,
@@ -322,7 +406,7 @@ def run_cycle(
                     odds_1=f"{match.odds_1_start:.2f}" if match.odds_1_start else "",
                     odds_x=f"{match.odds_x_start:.2f}" if match.odds_x_start else "",
                     odds_2=f"{match.odds_2_start:.2f}" if match.odds_2_start else "",
-                    link=match.nb_slug,
+                    link=match.nb_url,
                 )
                 log.info(
                     "Ratio rejected: %s ratio=%.3f threshold=%.2f",
@@ -335,8 +419,8 @@ def run_cycle(
             log.exception("Error placing bet for %s", match.match_key)
             stats.errors += 1
 
-    # 6. Save Excel (if any placed bets or missing matches)
-    if excel_writer.row_count > 0 or excel_writer.missing_count > 0 or excel_writer.rejected_count > 0:
+    # 6. Save Excel (if any data in any sheet)
+    if excel_writer.row_count > 0 or excel_writer.missing_count > 0 or excel_writer.rejected_count > 0 or excel_writer.pending_count > 0:
         try:
             path = excel_writer.save()
             telegram.send_document(path, caption="Результаты цикла")
@@ -354,11 +438,13 @@ def run_cycle(
         missing=stats.missing,
         errors=stats.errors,
         dry_run=config.kush.dry_run,
+        pending=stats.pending,
+        rejected=stats.rejected,
     )
 
     log.info(
         "Cycle done: %d total, %d filtered, %d decided, %d matched, "
-        "%d placed, %d missing, %d rejected, %d errors",
+        "%d placed, %d missing, %d rejected, %d pending, %d errors",
         stats.total_matches,
         stats.filtered,
         stats.decided,
@@ -366,6 +452,7 @@ def run_cycle(
         stats.placed,
         stats.missing,
         stats.rejected,
+        stats.pending,
         stats.errors,
     )
 

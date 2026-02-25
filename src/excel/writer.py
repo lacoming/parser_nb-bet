@@ -11,7 +11,7 @@ from datetime import datetime
 import xlsxwriter
 
 from src.excel.default_mapper import DEFAULT_COLUMNS, get_headers, get_widths
-from src.excel.models import ExcelRow, MissingRow, RejectedRow
+from src.excel.models import ExcelRow, MissingRow, PendingRow, RejectedRow
 
 log = logging.getLogger("parser_nb_bet.excel.writer")
 
@@ -30,6 +30,7 @@ class ExcelWriter:
         self._rows: list[ExcelRow] = []
         self._missing_rows: list[MissingRow] = []
         self._rejected_rows: list[RejectedRow] = []
+        self._pending_rows: list[PendingRow] = []
 
     @property
     def row_count(self) -> int:
@@ -43,6 +44,10 @@ class ExcelWriter:
     def rejected_count(self) -> int:
         return len(self._rejected_rows)
 
+    @property
+    def pending_count(self) -> int:
+        return len(self._pending_rows)
+
     def add_row(self, row: ExcelRow) -> None:
         """Add a row to the buffer."""
         self._rows.append(row)
@@ -55,11 +60,16 @@ class ExcelWriter:
         """Add a ratio-rejected row to the buffer."""
         self._rejected_rows.append(row)
 
+    def add_pending_row(self, row: PendingRow) -> None:
+        """Add a far-future pending row to the buffer."""
+        self._pending_rows.append(row)
+
     def clear(self) -> None:
         """Clear all buffers."""
         self._rows.clear()
         self._missing_rows.clear()
         self._rejected_rows.clear()
+        self._pending_rows.clear()
 
     def _make_filename(self, suffix: str = "") -> str:
         """Generate output filename with date."""
@@ -179,10 +189,34 @@ class ExcelWriter:
                 },
             )
 
+        # --- Fourth sheet: Ожидающие (far-future pending matches) ---
+        if self._pending_rows:
+            ws4 = wb.add_worksheet("Ожидающие")
+            p_headers = PendingRow.headers()
+            p_widths = PendingRow.widths()
+            for i, w in enumerate(p_widths):
+                ws4.set_column(i, i, w)
+            for col, h in enumerate(p_headers):
+                ws4.write(0, col, h, header_fmt)
+            for row_idx, prow in enumerate(self._pending_rows, start=1):
+                for col, val in enumerate(prow.as_list()):
+                    ws4.write(row_idx, col, val)
+            last_p = len(self._pending_rows)
+            last_pc = len(p_headers) - 1
+            p_columns = [{"header": h} for h in p_headers]
+            ws4.add_table(
+                0, 0, last_p, last_pc,
+                {
+                    "name": "PendingData",
+                    "style": "Table Style Medium 6",
+                    "columns": p_columns,
+                },
+            )
+
         wb.close()
         log.info(
-            "Excel saved: %s (%d rows, %d missing, %d rejected)",
+            "Excel saved: %s (%d rows, %d missing, %d rejected, %d pending)",
             filepath, len(self._rows), len(self._missing_rows),
-            len(self._rejected_rows),
+            len(self._rejected_rows), len(self._pending_rows),
         )
         return filepath

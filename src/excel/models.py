@@ -174,3 +174,42 @@ class RejectedRow:
     @staticmethod
     def widths() -> list[float]:
         return [12, 8, 25, 20, 20, 8, 10, 10, 10, 10, 10, 10, 10, 30]
+
+
+@dataclass
+class PendingRow:
+    """Row for far-future matches awaiting Kush window (written to 'Ожидающие' sheet)."""
+
+    date: str = ""  # DD.MM.YYYY
+    time: str = ""  # HH:MM
+    league: str = ""
+    team_home: str = ""
+    team_away: str = ""
+    bet_type: str = ""
+    odds_1_start: str = ""
+    odds_x_start: str = ""
+    odds_2_start: str = ""
+    kf_nb: str = ""
+    min_kf_kush: str = ""
+    link: str = ""
+
+    def as_list(self) -> list[str]:
+        return [
+            self.date, self.time, self.league,
+            self.team_home, self.team_away, self.bet_type,
+            self.odds_1_start, self.odds_x_start, self.odds_2_start,
+            self.kf_nb, self.min_kf_kush, self.link,
+        ]
+
+    @staticmethod
+    def headers() -> list[str]:
+        return [
+            "Дата", "Время", "Лига",
+            "Дома", "Гости", "Ставка",
+            "Kf1 старт", "KfX старт", "Kf2 старт",
+            "KfNB", "Мин KfKush", "Ссылка",
+        ]
+
+    @staticmethod
+    def widths() -> list[float]:
+        return [12, 8, 25, 20, 20, 8, 10, 10, 10, 10, 12, 30]

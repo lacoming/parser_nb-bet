@@ -217,6 +217,35 @@ class TestNotifyMissing:
         assert "1X" in sent_text
 
 
+# ── notify_pending ──────────────────────────────────────────────────
+
+
+class TestNotifyPending:
+    @patch("src.telegram.notifier.requests.post")
+    def test_pending_message(self, mock_post):
+        mock_post.return_value = MagicMock(json=lambda: {"ok": True, "result": {}})
+        n = TelegramNotifier("tok", [100], rate_limit=0)
+        results = n.notify_pending(
+            match_key="La Liga|Barca|Sevilla|20260310",
+            league="La Liga",
+            team_home="Barcelona",
+            team_away="Sevilla",
+            match_time="20:00",
+            match_date="10.03.2026",
+            bet_type="1",
+            odds_1="1.80",
+            odds_x="3.50",
+            odds_2="4.20",
+            link="https://nb-bet.com/soccer/barca-sevilla-123",
+        )
+        assert results[0].ok is True
+        sent_text = mock_post.call_args[1]["data"]["text"]
+        assert "ожидает" in sent_text
+        assert "Barcelona" in sent_text
+        assert "20:00" in sent_text
+        assert "Ставка" in sent_text
+
+
 # ── notify_ratio_rejected ───────────────────────────────────────────
 
 
@@ -298,6 +327,29 @@ class TestNotifyCycleSummary:
         sent_text = mock_post.call_args[1]["data"]["text"]
         assert "Итоги цикла" in sent_text
         assert "DRY\\-RUN" in sent_text
+
+    @patch("src.telegram.notifier.requests.post")
+    def test_summary_with_pending_and_rejected(self, mock_post):
+        mock_post.return_value = MagicMock(json=lambda: {"ok": True, "result": {}})
+        n = TelegramNotifier("tok", [100], rate_limit=0)
+        results = n.notify_cycle_summary(
+            total_matches=200,
+            filtered=50,
+            decided=20,
+            matched=10,
+            placed=5,
+            missing=3,
+            errors=0,
+            dry_run=False,
+            pending=185,
+            rejected=2,
+        )
+        assert results[0].ok is True
+        sent_text = mock_post.call_args[1]["data"]["text"]
+        assert "Ожидают" in sent_text
+        assert "`185`" in sent_text
+        assert "Отклонено" in sent_text
+        assert "`2`" in sent_text
 
 
 # ── send_test ────────────────────────────────────────────────────────

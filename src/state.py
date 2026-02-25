@@ -24,6 +24,7 @@ class AppState:
         self._known: set[str] = set()
         self._processed: set[str] = set()  # all fully processed (placed/rejected/missing)
         self._ratio_rejected: set[str] = set()  # ratio-rejected (NOT processed → recheck)
+        self._far_pending: set[str] = set()  # far-future matches (NOT processed → recheck)
         self._recheck_interval = recheck_interval  # seconds between rechecks
         self._max_checks = max_checks  # max rechecks before expiry
 
@@ -96,6 +97,17 @@ class AppState:
     @property
     def placed_count(self) -> int:
         return len(self._placed)
+
+    def record_far_pending(self, match_key: str) -> bool:
+        """Record a far-future match as pending. Returns True if new (for TG dedup).
+
+        Far-future matches must NOT go to _processed — they need re-evaluation
+        when they enter the Kush window.
+        """
+        if match_key in self._far_pending:
+            return False
+        self._far_pending.add(match_key)
+        return True
 
     @property
     def ratio_rejected_count(self) -> int:

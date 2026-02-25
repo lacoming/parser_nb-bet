@@ -12,7 +12,7 @@ from src.excel.default_mapper import (
     get_headers,
     get_widths,
 )
-from src.excel.models import ExcelRow, MissingRow, RejectedRow
+from src.excel.models import ExcelRow, MissingRow, PendingRow, RejectedRow
 from src.excel.writer import ExcelWriter
 
 
@@ -226,13 +226,16 @@ class TestExcelWriter:
         w.add_row(ExcelRow())
         w.add_missing_row(MissingRow())
         w.add_rejected_row(RejectedRow())
+        w.add_pending_row(PendingRow())
         assert w.row_count == 1
         assert w.missing_count == 1
         assert w.rejected_count == 1
+        assert w.pending_count == 1
         w.clear()
         assert w.row_count == 0
         assert w.missing_count == 0
         assert w.rejected_count == 0
+        assert w.pending_count == 0
 
     def test_save_three_sheets(self):
         """Save with all three types creates 3-sheet xlsx."""
@@ -257,6 +260,50 @@ class TestExcelWriter:
             ws3 = wb["Отклонено"]
             assert ws3.max_row == 2  # header + 1 data row
             wb.close()
+
+    def test_save_four_sheets(self):
+        """Save with all four types creates 4-sheet xlsx."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            w = ExcelWriter(output_dir=tmpdir)
+            w.add_row(ExcelRow(team_home="Arsenal", team_away="Chelsea"))
+            w.add_missing_row(MissingRow(team_home="Liverpool", team_away="Everton"))
+            w.add_rejected_row(RejectedRow(
+                team_home="Bayern", team_away="Dortmund",
+                kf_nb="2.10", kf_kush="2.20", ratio="1.08", threshold="1.10",
+            ))
+            w.add_pending_row(PendingRow(
+                date="10.03.2026", time="20:00", league="La Liga",
+                team_home="Barcelona", team_away="Sevilla",
+                bet_type="1", kf_nb="1.80", min_kf_kush="2.00",
+                link="https://nb-bet.com/soccer/barca-sevilla-123",
+            ))
+            path = w.save()
+            assert os.path.exists(path)
+            import openpyxl
+            wb = openpyxl.load_workbook(path)
+            sheet_names = wb.sheetnames
+            assert "Проставленные" in sheet_names
+            assert "Ненайденные" in sheet_names
+            assert "Отклонено" in sheet_names
+            assert "Ожидающие" in sheet_names
+            ws4 = wb["Ожидающие"]
+            assert ws4.max_row == 2  # header + 1 data row
+            # Verify some cell values
+            assert ws4.cell(2, 4).value == "Barcelona"
+            assert ws4.cell(2, 5).value == "Sevilla"
+            wb.close()
+
+    def test_add_pending_row(self):
+        w = ExcelWriter()
+        w.add_pending_row(PendingRow(team_home="Barcelona"))
+        assert w.pending_count == 1
+
+    def test_clear_clears_pending(self):
+        w = ExcelWriter()
+        w.add_pending_row(PendingRow())
+        assert w.pending_count == 1
+        w.clear()
+        assert w.pending_count == 0
 
 
 # ── RejectedRow ─────────────────────────────────────────────────────
@@ -291,3 +338,38 @@ class TestRejectedRow:
         assert vals[10] == "2.20"
         assert vals[11] == "1.08"
         assert vals[12] == "1.10"
+
+
+# ── PendingRow ─────────────────────────────────────────────────────
+
+
+class TestPendingRow:
+    def test_defaults_empty(self):
+        row = PendingRow()
+        assert row.date == ""
+        assert row.min_kf_kush == ""
+
+    def test_as_list_length(self):
+        row = PendingRow()
+        assert len(row.as_list()) == 12
+
+    def test_headers_length(self):
+        assert len(PendingRow.headers()) == 12
+
+    def test_widths_length(self):
+        assert len(PendingRow.widths()) == 12
+
+    def test_as_list_order(self):
+        row = PendingRow(
+            date="10.03.2026", time="20:00", league="La Liga",
+            team_home="Barcelona", team_away="Sevilla", bet_type="1",
+            kf_nb="1.80", min_kf_kush="2.00",
+            link="https://nb-bet.com/soccer/barca-sevilla-123",
+        )
+        vals = row.as_list()
+        assert vals[0] == "10.03.2026"
+        assert vals[3] == "Barcelona"
+        assert vals[5] == "1"
+        assert vals[9] == "1.80"
+        assert vals[10] == "2.00"
+        assert vals[11] == "https://nb-bet.com/soccer/barca-sevilla-123"

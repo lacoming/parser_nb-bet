@@ -37,6 +37,13 @@ class Match:
             return min(self.odds_1_end, self.odds_x_end)
         return None
 
+    @property
+    def nb_url(self) -> str:
+        """Full NB-Bet URL for this match."""
+        if self.nb_slug:
+            return f"https://nb-bet.com/{self.sport}/{self.nb_slug}"
+        return ""
+
     @staticmethod
     def make_key(league: str, home: str, away: str, dt: datetime) -> str:
         # Both NB and Kush work in MSK — timestamps are already in MSK frame
