@@ -33,7 +33,7 @@ class TestDecisionEngineKf1GtKf2:
 
     def test_all_pass(self):
         engine = DecisionEngine()
-        m = _make_match(odds_1_end=3.50, odds_x_end=3.20, odds_2_end=2.10)
+        m = _make_match(odds_1_start=3.50, odds_x_start=3.20, odds_2_start=2.10)
         decisions = engine.decide(m)
         types = {d.bet_type for d in decisions if d.passes}
         assert "1X" in types
@@ -43,7 +43,7 @@ class TestDecisionEngineKf1GtKf2:
 
     def test_1x_fails_kf1_too_high(self):
         engine = DecisionEngine()
-        m = _make_match(odds_1_end=9.00, odds_x_end=4.00, odds_2_end=1.50)
+        m = _make_match(odds_1_start=9.00, odds_x_start=4.00, odds_2_start=1.50)
         decisions = engine.decide(m)
         d_1x = next(d for d in decisions if d.bet_type == "1X")
         assert not d_1x.passes
@@ -52,49 +52,49 @@ class TestDecisionEngineKf1GtKf2:
     def test_1x_fails_kf1x_too_low(self):
         engine = DecisionEngine()
         # kf1x = min(kf1, kfx) = min(2.0, 1.3) = 1.3 < 1.5
-        m = _make_match(odds_1_end=2.00, odds_x_end=1.30, odds_2_end=1.50)
+        m = _make_match(odds_1_start=2.00, odds_x_start=1.30, odds_2_start=1.50)
         decisions = engine.decide(m)
         d_1x = next(d for d in decisions if d.bet_type == "1X")
         assert not d_1x.passes
 
     def test_1x_fails_kf2_too_low(self):
         engine = DecisionEngine()
-        m = _make_match(odds_1_end=3.00, odds_x_end=3.00, odds_2_end=1.30)
+        m = _make_match(odds_1_start=3.00, odds_x_start=3.00, odds_2_start=1.30)
         decisions = engine.decide(m)
         d_1x = next(d for d in decisions if d.bet_type == "1X")
         assert not d_1x.passes
 
     def test_1_passes(self):
         engine = DecisionEngine()
-        m = _make_match(odds_1_end=4.00, odds_x_end=3.00, odds_2_end=2.00)
+        m = _make_match(odds_1_start=4.00, odds_x_start=3.00, odds_2_start=2.00)
         decisions = engine.decide(m)
         d_1 = next(d for d in decisions if d.bet_type == "1")
         assert d_1.passes
 
     def test_1_fails_kf2_low(self):
         engine = DecisionEngine()
-        m = _make_match(odds_1_end=4.00, odds_x_end=3.00, odds_2_end=1.30)
+        m = _make_match(odds_1_start=4.00, odds_x_start=3.00, odds_2_start=1.30)
         decisions = engine.decide(m)
         d_1 = next(d for d in decisions if d.bet_type == "1")
         assert not d_1.passes
 
     def test_2_passes(self):
         engine = DecisionEngine()
-        m = _make_match(odds_1_end=3.50, odds_x_end=3.00, odds_2_end=2.00)
+        m = _make_match(odds_1_start=3.50, odds_x_start=3.00, odds_2_start=2.00)
         decisions = engine.decide(m)
         d_2 = next(d for d in decisions if d.bet_type == "2")
         assert d_2.passes
 
     def test_2_fails_kf2_too_low(self):
         engine = DecisionEngine()
-        m = _make_match(odds_1_end=3.50, odds_x_end=3.00, odds_2_end=1.40)
+        m = _make_match(odds_1_start=3.50, odds_x_start=3.00, odds_2_start=1.40)
         decisions = engine.decide(m)
         d_2 = next(d for d in decisions if d.bet_type == "2")
         assert not d_2.passes
 
     def test_x_same_as_1x(self):
         engine = DecisionEngine()
-        m = _make_match(odds_1_end=4.00, odds_x_end=3.00, odds_2_end=2.00)
+        m = _make_match(odds_1_start=4.00, odds_x_start=3.00, odds_2_start=2.00)
         decisions = engine.decide(m)
         d_1x = next(d for d in decisions if d.bet_type == "1X")
         d_x = next(d for d in decisions if d.bet_type == "X")
@@ -106,35 +106,35 @@ class TestDecisionEngineKf2GtKf1:
 
     def test_2_passes(self):
         engine = DecisionEngine()
-        m = _make_match(odds_1_end=1.80, odds_x_end=3.50, odds_2_end=4.50)
+        m = _make_match(odds_1_start=1.80, odds_x_start=3.50, odds_2_start=4.50)
         decisions = engine.decide(m)
         d_2 = next(d for d in decisions if d.bet_type == "2")
         assert d_2.passes
 
     def test_2_fails_kf2_too_high(self):
         engine = DecisionEngine()
-        m = _make_match(odds_1_end=1.80, odds_x_end=3.50, odds_2_end=9.00)
+        m = _make_match(odds_1_start=1.80, odds_x_start=3.50, odds_2_start=9.00)
         decisions = engine.decide(m)
         d_2 = next(d for d in decisions if d.bet_type == "2")
         assert not d_2.passes
 
     def test_2_fails_kf1_too_low(self):
         engine = DecisionEngine()
-        m = _make_match(odds_1_end=1.30, odds_x_end=3.50, odds_2_end=5.00)
+        m = _make_match(odds_1_start=1.30, odds_x_start=3.50, odds_2_start=5.00)
         decisions = engine.decide(m)
         d_2 = next(d for d in decisions if d.bet_type == "2")
         assert not d_2.passes
 
     def test_1_passes(self):
         engine = DecisionEngine()
-        m = _make_match(odds_1_end=1.80, odds_x_end=3.50, odds_2_end=4.50)
+        m = _make_match(odds_1_start=1.80, odds_x_start=3.50, odds_2_start=4.50)
         decisions = engine.decide(m)
         d_1 = next(d for d in decisions if d.bet_type == "1")
         assert d_1.passes
 
     def test_1_fails_kf1_too_low(self):
         engine = DecisionEngine()
-        m = _make_match(odds_1_end=1.40, odds_x_end=3.50, odds_2_end=4.50)
+        m = _make_match(odds_1_start=1.40, odds_x_start=3.50, odds_2_start=4.50)
         decisions = engine.decide(m)
         d_1 = next(d for d in decisions if d.bet_type == "1")
         assert not d_1.passes
@@ -143,7 +143,7 @@ class TestDecisionEngineKf2GtKf1:
 class TestDecisionEngineEdge:
     def test_equal_odds_skip(self):
         engine = DecisionEngine()
-        m = _make_match(odds_1_end=2.00, odds_x_end=3.00, odds_2_end=2.00)
+        m = _make_match(odds_1_start=2.00, odds_x_start=3.00, odds_2_start=2.00)
         decisions = engine.decide(m)
         assert len(decisions) == 1
         assert decisions[0].bet_type == "skip"
@@ -151,20 +151,20 @@ class TestDecisionEngineEdge:
 
     def test_missing_odds_skip(self):
         engine = DecisionEngine()
-        m = _make_match(odds_1_end=None, odds_2_end=None)
+        m = _make_match(odds_1_start=None, odds_2_start=None)
         decisions = engine.decide(m)
         assert decisions[0].bet_type == "skip"
 
     def test_get_passing_decisions(self):
         engine = DecisionEngine()
-        m = _make_match(odds_1_end=3.50, odds_x_end=3.20, odds_2_end=2.10)
+        m = _make_match(odds_1_start=3.50, odds_x_start=3.20, odds_2_start=2.10)
         passing = engine.get_passing_decisions(m)
         assert all(d.passes for d in passing)
         assert len(passing) > 0
 
     def test_boundary_kf1_equals_8(self):
         engine = DecisionEngine()
-        m = _make_match(odds_1_end=8.00, odds_x_end=4.00, odds_2_end=1.50)
+        m = _make_match(odds_1_start=8.00, odds_x_start=4.00, odds_2_start=1.50)
         decisions = engine.decide(m)
         d_1x = next(d for d in decisions if d.bet_type == "1X")
         # kf1 <= 8 should pass
@@ -172,7 +172,7 @@ class TestDecisionEngineEdge:
 
     def test_boundary_kf2_equals_1_5(self):
         engine = DecisionEngine()
-        m = _make_match(odds_1_end=3.00, odds_x_end=3.00, odds_2_end=1.50)
+        m = _make_match(odds_1_start=3.00, odds_x_start=3.00, odds_2_start=1.50)
         decisions = engine.decide(m)
         d_2 = next(d for d in decisions if d.bet_type == "2")
         # kf2 >= 1.5 should pass
@@ -372,8 +372,8 @@ class TestLeagueFilter:
         f = LeagueFilter([s])
         m = _make_match(
             league="England. Premier League",
-            odds_1_end=2.0,
-            odds_2_end=3.0,
+            odds_1_start=2.0,
+            odds_2_start=3.0,
         )
         decisions = f.get_decisions(m)
         assert len(decisions) == 1
@@ -390,8 +390,8 @@ class TestLeagueFilter:
         f = LeagueFilter([s])
         m = _make_match(
             league="England. Premier League",
-            odds_1_end=3.0,  # kf1 > kf2 — fails kf1<kf2
-            odds_2_end=2.0,
+            odds_1_start=3.0,  # kf1 > kf2 — fails kf1<kf2
+            odds_2_start=2.0,
         )
         decisions = f.get_decisions(m)
         assert len(decisions) == 0

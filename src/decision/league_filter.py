@@ -100,8 +100,8 @@ class LeagueFilter:
             return []
 
         decisions = []
-        kf1 = match.odds_1_end
-        kf2 = match.odds_2_end
+        kf1 = match.odds_1_start
+        kf2 = match.odds_2_start
 
         for s in settings:
             if s.check(kf1, kf2):

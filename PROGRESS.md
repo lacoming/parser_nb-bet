@@ -214,3 +214,33 @@ C# код остаётся в ветке `main`/`master` как бэкап.
 - `--once --dry-run` — полный цикл (NB API → filter → decide)
 - rapidfuzz import — OK
 - assets/data/* — загружаются через sys._MEIPASS
+
+## Post-release fix: 4th Excel sheet + links + TG pending — DONE (2026-02-25)
+**Задача:** 3 бага от заказчика: пустой лист "Проставленные", сломанные ссылки, пропавшие 185 матчей.
+
+**Сделано:**
+- `src/nb/models.py` — добавлено свойство `nb_url` (полный URL вместо slug)
+- `src/excel/models.py` — добавлен `PendingRow` dataclass (12 полей, как MissingRow)
+- `src/excel/writer.py` — 4-й лист "Ожидающие" (Table Style Medium 6), `add_pending_row()`, `pending_count`
+- `src/state.py` — `record_far_pending()` для дедупликации TG уведомлений между циклами
+- `src/telegram/notifier.py` — `notify_pending()` с заголовком "ожидает", `notify_cycle_summary()` + `pending`/`rejected` поля
+- `src/scheduler/cycle_runner.py` — обработка far-future матчей через decision engine → pending sheet + TG;
+  исправлены все 6 `link=nb_slug` → `link=nb_url`; early-exit сохраняет Excel при наличии pending
+- 19 новых тестов (385 проходят)
+- Коммит: `156380c`
+
+**Исправлено:**
+1. Far-future матчи (>3 дня) → лист "Ожидающие" вместо молчаливого пропуска
+2. Ссылки: полные URL `https://nb-bet.com/soccer/slug` вместо сырых slug
+3. TG: уведомления "ожидает" для far-future матчей с дедупликацией
+4. Cycle summary: добавлены строки "Ожидают" и "Отклонено"
+
+## BUG-7: Decision engine использовал текущие КФ вместо начальных — DONE (2026-02-25)
+**Задача:** Ветвление kf1>kf2 и проверка условий использовали `odds_*_end` (текущие).
+Когда КФ "прогибают", текущие КФ могут перевернуть ветку и парсер рассматривает не тот исход.
+
+**Исправлено:**
+- `decision/engine.py` — `decide()`: kf1/kf2/kfx/kf1x теперь из `odds_*_start`
+- `scheduler/cycle_runner.py` — `setting.check()` вызывается с `odds_*_start` (2 места)
+- `decision/league_filter.py` — `get_decisions()`: kf1/kf2 из `odds_*_start`
+- Обновлены 18 тестов → 386 проходят

@@ -136,7 +136,7 @@ def run_cycle(
         setting = league_filter.find_setting(far_match)
         if not setting:
             continue
-        if not setting.check(far_match.odds_1_end, far_match.odds_2_end):
+        if not setting.check(far_match.odds_1_start, far_match.odds_2_start):
             continue
         target_bet_type = setting.bet_type
         league_roi = setting.roi
@@ -192,10 +192,10 @@ def run_cycle(
         # The league setting defines the ONE bet type for this group
         target_bet_type = setting.bet_type  # "1" | "2" | "1X" | "X"
         # Check if match odds satisfy the league conditions
-        if not setting.check(match.odds_1_end, match.odds_2_end):
+        if not setting.check(match.odds_1_start, match.odds_2_start):
             log.debug(
-                "Conditions not met for %s bet=%s: kf1=%s kf2=%s",
-                match.match_key, target_bet_type, match.odds_1_end, match.odds_2_end,
+                "Conditions not met for %s bet=%s: kf1_start=%s kf2_start=%s",
+                match.match_key, target_bet_type, match.odds_1_start, match.odds_2_start,
             )
             continue
         decision = BetDecision(

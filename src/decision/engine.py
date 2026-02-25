@@ -29,12 +29,13 @@ class DecisionEngine:
     def decide(self, match: Match) -> list[BetDecision]:
         """Return list of applicable bet decisions for this match.
 
-        Each decision says whether the bet passes and why.
+        Uses START (opening) odds for branch selection and threshold checks,
+        because current odds can be manipulated by bettors ("прогнуты").
         """
-        kf1 = match.odds_1_end
-        kf2 = match.odds_2_end
-        kfx = match.odds_x_end
-        kf1x = match.odds_1x_end
+        kf1 = match.odds_1_start
+        kf2 = match.odds_2_start
+        kfx = match.odds_x_start
+        kf1x = match.odds_1x_start
 
         if kf1 is None or kf2 is None:
             return [BetDecision(bet_type="skip", passes=False, reasons=["missing odds"])]
