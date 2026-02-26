@@ -25,6 +25,7 @@ class AppState:
         self._processed: set[str] = set()  # all fully processed (placed/rejected/missing)
         self._ratio_rejected: set[str] = set()  # ratio-rejected (NOT processed → recheck)
         self._far_pending: set[str] = set()  # far-future matches (NOT processed → recheck)
+        self._nb_placed: set[str] = set()  # NB-Bet tips placed (dedup)
         self._recheck_interval = recheck_interval  # seconds between rechecks
         self._max_checks = max_checks  # max rechecks before expiry
 
@@ -108,6 +109,18 @@ class AppState:
             return False
         self._far_pending.add(match_key)
         return True
+
+    def is_nb_placed(self, match_key: str) -> bool:
+        """Check if NB-Bet tip was already placed for this match."""
+        return match_key in self._nb_placed
+
+    def record_nb_placed(self, match_key: str) -> None:
+        """Record that NB-Bet tip was placed for this match."""
+        self._nb_placed.add(match_key)
+
+    @property
+    def nb_placed_count(self) -> int:
+        return len(self._nb_placed)
 
     @property
     def ratio_rejected_count(self) -> int:

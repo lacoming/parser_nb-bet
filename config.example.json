@@ -44,7 +44,11 @@
     "base_url": "https://nb-bet.com/Results",
     "timeout_seconds": 30,
     "retries": 3,
-    "retry_delay_seconds": 5
+    "retry_delay_seconds": 5,
+    "login": "",
+    "password": "",
+    "dry_run": true,
+    "default_stake": 1000
   },
   "logging": {
     "level": "INFO",

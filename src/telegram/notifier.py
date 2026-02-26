@@ -285,6 +285,7 @@ class TelegramNotifier:
         dry_run: bool,
         pending: int = 0,
         rejected: int = 0,
+        nb_placed: int = 0,
     ) -> list[SendResult]:
         """Notify with a summary of one cycle run."""
         mode = "DRY\\-RUN" if dry_run else "LIVE"
@@ -293,8 +294,9 @@ class TelegramNotifier:
             f"Матчей NB: `{total_matches}`",
             f"Прошли фильтр: `{filtered}`",
             f"Решение: `{decided}`",
+            f"Прогнозы NB: `{nb_placed}`",
             f"Найдено на Куше: `{matched}`",
-            f"Ставки: `{placed}`",
+            f"Ставки Куш: `{placed}`",
             f"Не найдено: `{missing}`",
             f"Ожидают: `{pending}`",
             f"Отклонено: `{rejected}`",

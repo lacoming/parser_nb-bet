@@ -17,8 +17,10 @@ from src.kush.bet_placer import BetPlacer
 from src.kush.client import KushClient
 from src.kush.matcher import EventMatcher
 from src.kush.session import KushSession
+from src.nb.bet_placer import NbBetPlacer
 from src.nb.client import NbClient
 from src.nb.models import Match
+from src.nb.session import NbSession
 from src.state import AppState
 from src.telegram.notifier import TelegramNotifier
 
@@ -50,6 +52,7 @@ class CycleStats:
         self.missing = 0
         self.rejected = 0
         self.pending = 0
+        self.nb_placed = 0
         self.errors = 0
 
 
@@ -207,6 +210,38 @@ def run_cycle(
     stats.decided = len(passing)
     log.info("Decision engine: %d matches with passing bets", stats.decided)
 
+    # 3b. NB-Bet tip placement (before Kush — slug already available from NB API)
+    nb_placer = None
+    if config.nb.login and config.nb.password:
+        try:
+            nb_session = NbSession(
+                proxy=proxies[0] if proxies else None,
+                timeout=config.nb.timeout_seconds,
+                retries=config.nb.retries,
+                retry_delay=float(config.nb.retry_delay_seconds),
+            )
+            nb_session.login(config.nb.login, config.nb.password)
+            nb_placer = NbBetPlacer(nb_session, config.nb)
+        except Exception:
+            log.exception("NB-Bet login failed")
+            stats.errors += 1
+
+    if nb_placer:
+        for match, decision, _league_roi in passing:
+            if state.is_nb_placed(match.match_key):
+                continue
+            nb_result = nb_placer.place_tip(
+                match, decision.bet_type, config.nb.dry_run,
+            )
+            if nb_result.success:
+                stats.nb_placed += 1
+                state.record_nb_placed(match.match_key)
+                log.info("NB tip OK: %s %s", match.match_key, decision.bet_type)
+            else:
+                log.warning(
+                    "NB tip FAIL: %s — %s", match.match_key, nb_result.error,
+                )
+
     if not passing:
         log.info("No passing decisions for near-window matches")
         # Still save Excel if pending rows exist from far-future processing
@@ -228,6 +263,7 @@ def run_cycle(
             dry_run=config.kush.dry_run,
             pending=stats.pending,
             rejected=stats.rejected,
+            nb_placed=stats.nb_placed,
         )
         return stats
 
@@ -440,11 +476,12 @@ def run_cycle(
         dry_run=config.kush.dry_run,
         pending=stats.pending,
         rejected=stats.rejected,
+        nb_placed=stats.nb_placed,
     )
 
     log.info(
         "Cycle done: %d total, %d filtered, %d decided, %d matched, "
-        "%d placed, %d missing, %d rejected, %d pending, %d errors",
+        "%d placed, %d missing, %d rejected, %d pending, %d nb_placed, %d errors",
         stats.total_matches,
         stats.filtered,
         stats.decided,
@@ -453,6 +490,7 @@ def run_cycle(
         stats.missing,
         stats.rejected,
         stats.pending,
+        stats.nb_placed,
         stats.errors,
     )
 

@@ -65,6 +65,10 @@ class NbConfig:
     timeout_seconds: int = 30
     retries: int = 3
     retry_delay_seconds: int = 5
+    login: str = ""
+    password: str = ""
+    dry_run: bool = True
+    default_stake: int = 1000
 
 
 @dataclass
