@@ -69,21 +69,21 @@ class TestMatchModel:
         )
         assert m.odds_1x_end == 3.20
 
-    def test_nb_url_soccer(self):
+    def test_nb_url_events(self):
         m = Match(
             match_key="k", league="L", team_home="A", team_away="B",
             start_time_utc=datetime.now(timezone.utc),
-            nb_slug="arsenal-chelsea-123", sport="soccer",
+            nb_slug="1561561-genk-dinamo-zagreb-prognoz-na-match", sport="soccer",
         )
-        assert m.nb_url == "https://nb-bet.com/soccer/arsenal-chelsea-123"
+        assert m.nb_url == "https://nb-bet.com/Events/1561561-genk-dinamo-zagreb-prognoz-na-match"
 
-    def test_nb_url_hockey(self):
+    def test_nb_url_live_events(self):
         m = Match(
             match_key="k", league="L", team_home="A", team_away="B",
             start_time_utc=datetime.now(timezone.utc),
-            nb_slug="cska-dynamo-456", sport="hockey",
+            nb_slug="1561564-viktoriya-plzen-panatinaikos-live-prognoz-na-match", sport="soccer",
         )
-        assert m.nb_url == "https://nb-bet.com/hockey/cska-dynamo-456"
+        assert m.nb_url == "https://nb-bet.com/LiveEvents/1561564-viktoriya-plzen-panatinaikos-live-prognoz-na-match"
 
     def test_nb_url_empty_slug(self):
         m = Match(

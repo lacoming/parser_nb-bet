@@ -146,6 +146,35 @@ class EventMatcher:
             )
             return best
 
+        # --- Diagnostic: log why no match was found ---
+        if best is not None:
+            ev = best.kush_event
+            log.info(
+                "NO MATCH for '%s' (NB time=%s). Best candidate: eid=%s '%s vs %s' "
+                "(Kush time=%s) confidence=%.2f (need %.2f) "
+                "name=%.2f time=%.2f swapped=%s",
+                nb_match.match_key,
+                nb_match.start_time_utc.strftime("%H:%M %d.%m"),
+                ev.event_id if ev else "?",
+                ev.team_home if ev else "?",
+                ev.team_away if ev else "?",
+                ev.start_time_utc.strftime("%H:%M %d.%m") if ev else "?",
+                best.confidence,
+                self._min_confidence,
+                best.name_score,
+                best.time_score,
+                best.swapped,
+            )
+        else:
+            log.info(
+                "NO MATCH for '%s' (NB time=%s). "
+                "0 candidates passed time filter (tolerance=%.1fh). "
+                "Total events checked: %d",
+                nb_match.match_key,
+                nb_match.start_time_utc.strftime("%H:%M %d.%m"),
+                self._tolerance.total_seconds() / 3600,
+                len(candidates),
+            )
         return None
 
     def _score(self, nb_match: Match, event: KushEvent) -> Optional[MatchResult]:

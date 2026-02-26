@@ -40,9 +40,11 @@ class Match:
     @property
     def nb_url(self) -> str:
         """Full NB-Bet URL for this match."""
-        if self.nb_slug:
-            return f"https://nb-bet.com/{self.sport}/{self.nb_slug}"
-        return ""
+        if not self.nb_slug:
+            return ""
+        if "-live-" in self.nb_slug:
+            return f"https://nb-bet.com/LiveEvents/{self.nb_slug}"
+        return f"https://nb-bet.com/Events/{self.nb_slug}"
 
     @staticmethod
     def make_key(league: str, home: str, away: str, dt: datetime) -> str:
