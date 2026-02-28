@@ -25,16 +25,26 @@ class Match:
 
     @property
     def odds_1x_start(self) -> float | None:
-        """Double chance 1X = min(kf1, kfX) from START odds — used in ratio formula."""
+        """Double chance 1X coefficient from START odds.
+
+        Formula: 1 / (1/kf1 + 1/kfX) — matches NB-Bet's actual HOME_OR_X coefficient.
+        Previously used min(kf1, kfX) which overestimates the 1X coefficient
+        and caused bets to pass the >= 1.5 threshold incorrectly.
+        """
         if self.odds_1_start is not None and self.odds_x_start is not None:
-            return min(self.odds_1_start, self.odds_x_start)
+            denom = (1 / self.odds_1_start) + (1 / self.odds_x_start)
+            return 1 / denom if denom > 0 else None
         return None
 
     @property
     def odds_1x_end(self) -> float | None:
-        """Double chance 1X = min(kf1, kfX) — used in decision engine."""
+        """Double chance 1X coefficient from END odds.
+
+        Formula: 1 / (1/kf1 + 1/kfX) — matches NB-Bet's actual HOME_OR_X coefficient.
+        """
         if self.odds_1_end is not None and self.odds_x_end is not None:
-            return min(self.odds_1_end, self.odds_x_end)
+            denom = (1 / self.odds_1_end) + (1 / self.odds_x_end)
+            return 1 / denom if denom > 0 else None
         return None
 
     @property

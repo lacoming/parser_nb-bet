@@ -47,12 +47,14 @@ class TestMatchModel:
         assert key == "EPL|Man Utd|Liverpool|20260221"
 
     def test_odds_1x_end(self):
+        # Formula: 1 / (1/1.85 + 1/3.40) = 1 / (0.5405 + 0.2941) = 1 / 0.8346 ≈ 1.198
         m = Match(
             match_key="k", league="L", team_home="A", team_away="B",
             start_time_utc=datetime.now(timezone.utc), nb_slug="s", sport="soccer",
             odds_1_end=1.85, odds_x_end=3.40,
         )
-        assert m.odds_1x_end == 1.85  # min(1.85, 3.40)
+        expected = 1 / (1 / 1.85 + 1 / 3.40)
+        assert abs(m.odds_1x_end - expected) < 0.001
 
     def test_odds_1x_end_none(self):
         m = Match(
@@ -62,12 +64,14 @@ class TestMatchModel:
         assert m.odds_1x_end is None
 
     def test_odds_1x_end_x_lower(self):
+        # Formula: 1 / (1/5.00 + 1/3.20) = 1 / (0.20 + 0.3125) = 1 / 0.5125 ≈ 1.951
         m = Match(
             match_key="k", league="L", team_home="A", team_away="B",
             start_time_utc=datetime.now(timezone.utc), nb_slug="s", sport="soccer",
             odds_1_end=5.00, odds_x_end=3.20,
         )
-        assert m.odds_1x_end == 3.20
+        expected = 1 / (1 / 5.00 + 1 / 3.20)
+        assert abs(m.odds_1x_end - expected) < 0.001
 
     def test_nb_url_events(self):
         m = Match(
