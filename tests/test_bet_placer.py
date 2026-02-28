@@ -457,22 +457,26 @@ class TestBug1_1XRatioByP1:
     """BUG-1: For '1X' bets, ratio is computed using П1 coefficient, not 1X."""
 
     def test_1x_dry_run_uses_p1_for_ratio(self):
-        """Verify find_odds_entry is called with 'П1' for 1X bets."""
+        """Verify find_odds_entry is called with 'П1' for ratio, then '1X' for coef check."""
         placer, _, client = _make_placer()
-        # П1 coefficient on Kush = 3.00, NB kf1 = 2.00
+        # П1 coefficient on Kush = 3.00, 1X coefficient = 1.80 (>= 1.5)
         # ratio = 3.00 * 1.05 / 2.00 = 1.575 > 1.05 (EPL threshold)
-        client.find_odds_entry.return_value = _make_odds_entry(
-            bet_type="П1", coefficient=3.00,
-        )
+        def side_effect(event_id, bet_type):
+            if bet_type == "П1":
+                return _make_odds_entry(bet_type="П1", coefficient=3.00)
+            if bet_type == "1X":
+                return _make_odds_entry(bet_type="1X", coefficient=1.80)
+            return None
+        client.find_odds_entry.side_effect = side_effect
         match = _make_match(league="EPL")
 
         result = placer.place_bet(
             match, "99999", "/event/99999-x", "1X", 2.00, dry_run=True,
         )
-        # Must call find_odds_entry with "П1" (not "1X")
-        client.find_odds_entry.assert_called_once_with(
-            event_id="99999", bet_type="П1",
-        )
+        # Must call find_odds_entry first with "П1" (ratio), then "1X" (coef check)
+        assert client.find_odds_entry.call_count == 2
+        client.find_odds_entry.assert_any_call(event_id="99999", bet_type="П1")
+        client.find_odds_entry.assert_any_call(event_id="99999", bet_type="1X")
         assert result.success is True
         assert result.bet_type == "1X"
         assert result.kf_kush == 3.00  # П1 coefficient used for ratio
@@ -480,11 +484,15 @@ class TestBug1_1XRatioByP1:
     def test_1x_ratio_uses_p1_kf_not_1x_kf(self):
         """If 1X kf is low but П1 kf is high enough, ratio should pass."""
         placer, _, client = _make_placer()
-        # Scenario: П1 kf=2.50, 1X kf=1.52 (which would fail if used)
+        # Scenario: П1 kf=2.50, 1X kf=1.52 (>= 1.5, passes coef check)
         # ratio = 2.50 * 1.05 / 2.10 = 1.25 > 1.05 → passes
-        client.find_odds_entry.return_value = _make_odds_entry(
-            bet_type="П1", coefficient=2.50,
-        )
+        def side_effect(event_id, bet_type):
+            if bet_type == "П1":
+                return _make_odds_entry(bet_type="П1", coefficient=2.50)
+            if bet_type == "1X":
+                return _make_odds_entry(bet_type="1X", coefficient=1.52)
+            return None
+        client.find_odds_entry.side_effect = side_effect
         match = _make_match(league="EPL")
 
         result = placer.place_bet(
@@ -507,6 +515,44 @@ class TestBug1_1XRatioByP1:
         )
         assert result.success is False
         assert result.ratio_passes is False
+
+    def test_1x_rejected_when_kush_1x_coef_below_1_5(self):
+        """BUG FIX: 1X bet must be rejected if Kush 1X coefficient < 1.5."""
+        placer, _, client = _make_placer()
+        # П1 kf=3.00 (ratio passes), but 1X kf=1.43 (< 1.5 → reject)
+        def side_effect(event_id, bet_type):
+            if bet_type == "П1":
+                return _make_odds_entry(bet_type="П1", coefficient=3.00)
+            if bet_type == "1X":
+                return _make_odds_entry(bet_type="1X", coefficient=1.43)
+            return None
+        client.find_odds_entry.side_effect = side_effect
+        match = _make_match(league="EPL")
+
+        result = placer.place_bet(
+            match, "99999", "/event/99999-x", "1X", 2.00, dry_run=True,
+        )
+        assert result.success is False
+        assert result.placed is False
+        assert "1X coefficient 1.43 < 1.5" in result.error
+        assert result.kf_kush == 1.43  # Reports the Kush 1X coefficient
+
+    def test_1x_accepted_when_kush_1x_coef_exactly_1_5(self):
+        """1X bet should pass when Kush 1X coefficient == 1.5."""
+        placer, _, client = _make_placer()
+        def side_effect(event_id, bet_type):
+            if bet_type == "П1":
+                return _make_odds_entry(bet_type="П1", coefficient=3.00)
+            if bet_type == "1X":
+                return _make_odds_entry(bet_type="1X", coefficient=1.50)
+            return None
+        client.find_odds_entry.side_effect = side_effect
+        match = _make_match(league="EPL")
+
+        result = placer.place_bet(
+            match, "99999", "/event/99999-x", "1X", 2.00, dry_run=True,
+        )
+        assert result.success is True
 
     def test_non_1x_still_uses_own_bet_type(self):
         """Non-1X bet types should still use their own coefficient."""

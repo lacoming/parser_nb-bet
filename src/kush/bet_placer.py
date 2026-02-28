@@ -154,7 +154,57 @@ class BetPlacer:
                 team_away=match.team_away,
             )
 
-        # Step 3: Dry-run or real bet
+        # Step 3: For 1X bets, find the actual 1X odds on Kush and validate >= 1.5
+        if bet_type_kush != ratio_bet_type:
+            bet_odds_entry = self._client.find_odds_entry(
+                event_id=kush_event_id,
+                bet_type=bet_type_kush,
+            )
+            if bet_odds_entry is None:
+                return BetResult(
+                    match_key=match.match_key,
+                    event_id=kush_event_id,
+                    bet_type=bet_type_kush,
+                    kf_nb=kf_nb,
+                    kf_kush=kf_kush,
+                    ratio=ratio,
+                    threshold=threshold,
+                    ratio_passes=True,
+                    placed=False,
+                    dry_run=dry_run,
+                    success=False,
+                    error=f"Odds entry not found for {bet_type_kush} (bet placement)",
+                    league=match.league,
+                    team_home=match.team_home,
+                    team_away=match.team_away,
+                )
+            # 1X coefficient on Kush must be >= 1.5 (same threshold as decision engine)
+            if bet_type_kush == "1X" and bet_odds_entry.coefficient < 1.5:
+                log.info(
+                    "1X coefficient on Kush too low: %.2f < 1.5 for %s vs %s",
+                    bet_odds_entry.coefficient, match.team_home, match.team_away,
+                )
+                return BetResult(
+                    match_key=match.match_key,
+                    event_id=kush_event_id,
+                    bet_type=bet_type_kush,
+                    kf_nb=kf_nb,
+                    kf_kush=bet_odds_entry.coefficient,
+                    ratio=ratio,
+                    threshold=threshold,
+                    ratio_passes=True,
+                    placed=False,
+                    dry_run=dry_run,
+                    success=False,
+                    error=f"Kush 1X coefficient {bet_odds_entry.coefficient:.2f} < 1.5",
+                    league=match.league,
+                    team_home=match.team_home,
+                    team_away=match.team_away,
+                )
+        else:
+            bet_odds_entry = ratio_odds_entry
+
+        # Step 4: Dry-run or real bet
         if dry_run:
             log.info(
                 "DRY-RUN: Would place %s on %s vs %s (ratio by %s kf=%.2f, ratio=%.3f)",
@@ -177,33 +227,6 @@ class BetPlacer:
                 team_home=match.team_home,
                 team_away=match.team_away,
             )
-
-        # Step 4: For 1X bets, find the actual 1X odds entry for placement
-        if bet_type_kush != ratio_bet_type:
-            bet_odds_entry = self._client.find_odds_entry(
-                event_id=kush_event_id,
-                bet_type=bet_type_kush,
-            )
-            if bet_odds_entry is None:
-                return BetResult(
-                    match_key=match.match_key,
-                    event_id=kush_event_id,
-                    bet_type=bet_type_kush,
-                    kf_nb=kf_nb,
-                    kf_kush=kf_kush,
-                    ratio=ratio,
-                    threshold=threshold,
-                    ratio_passes=True,
-                    placed=False,
-                    dry_run=False,
-                    success=False,
-                    error=f"Odds entry not found for {bet_type_kush} (bet placement)",
-                    league=match.league,
-                    team_home=match.team_home,
-                    team_away=match.team_away,
-                )
-        else:
-            bet_odds_entry = ratio_odds_entry
 
         # Step 5: Real bet placement
         return self._place_real_bet(
