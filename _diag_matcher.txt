@@ -1,0 +1,121 @@
+2026-02-24 18:49:38,471 [DEBUG] parser_nb_bet.kush.session: CSRF token obtained: EwRdnj9GGJLx3Pvy...
+2026-02-24 18:49:41,281 [DEBUG] parser_nb_bet.kush.client: League 29436 (Лига Чемпионов УЕФА): 4 events
+2026-02-24 18:49:43,072 [DEBUG] parser_nb_bet.kush.client: League 29459 (Чемпионат Англии. Лига 1): 3 events
+2026-02-24 18:49:44,923 [DEBUG] parser_nb_bet.kush.client: League 29454 (Чемпионат Англии. Чемпионшип): 8 events
+2026-02-24 18:49:46,696 [DEBUG] parser_nb_bet.kush.client: League 30824 (Чемпионат Аргентины. Примера дивизион): 1 events
+2026-02-24 18:49:48,515 [DEBUG] parser_nb_bet.kush.client: League 30793 (Чемпионат Египта. Премьер-лига): 4 events
+2026-02-24 18:49:50,304 [DEBUG] parser_nb_bet.kush.client: League 29949 (Чемпионат Германии. Региональная лига. Запад): 1 events
+2026-02-24 18:49:52,114 [DEBUG] parser_nb_bet.kush.client: League 57802 (Австрия. Региональная лига Восток): 1 events
+2026-02-24 18:49:53,916 [DEBUG] parser_nb_bet.kush.client: League 30577 (Англия. Трофей Футбольной Лиги): 1 events
+2026-02-24 18:49:55,720 [DEBUG] parser_nb_bet.kush.client: League 29539 (Ирландия. Лейнстер Лига): 1 events
+2026-02-24 18:49:57,539 [DEBUG] parser_nb_bet.kush.client: League 34501 (Кубок Бразилии): 1 events
+2026-02-24 18:49:59,376 [DEBUG] parser_nb_bet.kush.client: League 29477 (Товарищеские матчи клубов): 7 events
+2026-02-24 18:50:01,151 [DEBUG] parser_nb_bet.kush.client: League 33769 (Товарищеские матчи клубов. Женщины): 1 events
+2026-02-24 18:50:03,051 [DEBUG] parser_nb_bet.kush.client: League 39645 (Чемпионат Австрии. Вторая лига): 1 events
+2026-02-24 18:50:04,817 [DEBUG] parser_nb_bet.kush.client: League 30747 (Чемпионат Англии. Истмийская Лига. 1-й дивизион. Север): 2 events
+2026-02-24 18:50:06,577 [DEBUG] parser_nb_bet.kush.client: League 57360 (Чемпионат Англии. Истмийская Лига. 1-й дивизион. Юг-Центр): 2 events
+2026-02-24 18:50:08,386 [DEBUG] parser_nb_bet.kush.client: League 44699 (Чемпионат Англии. Истмийская Лига. 1-й дивизион. Юго-Восток): 1 events
+2026-02-24 18:50:10,218 [DEBUG] parser_nb_bet.kush.client: League 29516 (Чемпионат Англии. Истмийская Лига. Премьер-дивизион): 5 events
+2026-02-24 18:50:11,998 [DEBUG] parser_nb_bet.kush.client: League 29476 (Чемпионат Англии. Лига 2): 2 events
+2026-02-24 18:50:13,845 [DEBUG] parser_nb_bet.kush.client: League 29488 (Чемпионат Англии. Национальная лига): 6 events
+2026-02-24 18:50:15,657 [DEBUG] parser_nb_bet.kush.client: League 57084 (Чемпионат Англии. Национальная лига. Премьер дивизион. Женщины): 1 events
+2026-02-24 18:50:17,479 [DEBUG] parser_nb_bet.kush.client: League 31342 (Чемпионат Англии. Северная лига. Дивизион 1): 4 events
+2026-02-24 18:50:19,327 [DEBUG] parser_nb_bet.kush.client: League 29514 (Чемпионат Англии. Северная Национальная лига): 12 events
+2026-02-24 18:50:21,193 [DEBUG] parser_nb_bet.kush.client: League 29508 (Чемпионат Англии. Северная Премьер-лига): 2 events
+2026-02-24 18:50:22,968 [DEBUG] parser_nb_bet.kush.client: League 29515 (Чемпионат Англии. Южная Национальная лига): 10 events
+2026-02-24 18:50:24,683 [DEBUG] parser_nb_bet.kush.client: League 29506 (Чемпионат Англии. Южная Премьер-лига. Центр): 3 events
+2026-02-24 18:50:26,491 [DEBUG] parser_nb_bet.kush.client: League 29505 (Чемпионат Англии. Южная Премьер-лига. Юг): 3 events
+2026-02-24 18:50:28,296 [DEBUG] parser_nb_bet.kush.client: League 30644 (Чемпионат Англии. Южный дивизион 1): 3 events
+2026-02-24 18:50:30,109 [DEBUG] parser_nb_bet.kush.client: League 54592 (Чемпионат Бахрейна до 21 года): 4 events
+2026-02-24 18:50:31,931 [DEBUG] parser_nb_bet.kush.client: League 30338 (Чемпионат Бразилии до 20 лет): 5 events
+2026-02-24 18:50:33,706 [DEBUG] parser_nb_bet.kush.client: League 33367 (Чемпионат Гамбии. 2-й дивизион): 3 events
+2026-02-24 18:50:35,505 [DEBUG] parser_nb_bet.kush.client: League 29948 (Чемпионат Германии. Региональная лига Бавария): 1 events
+2026-02-24 18:50:37,312 [DEBUG] parser_nb_bet.kush.client: League 44992 (Чемпионат Гондураса. Резервная лига): 1 events
+2026-02-24 18:50:39,130 [DEBUG] parser_nb_bet.kush.client: League 35148 (Чемпионат Иордании): 1 events
+2026-02-24 18:50:40,931 [DEBUG] parser_nb_bet.kush.client: League 31155 (Чемпионат Катара до 23 лет): 1 events
+2026-02-24 18:50:42,734 [DEBUG] parser_nb_bet.kush.client: League 30002 (Чемпионат Колумбии. Примера B): 2 events
+2026-02-24 18:50:44,548 [DEBUG] parser_nb_bet.kush.client: League 34778 (Чемпионат КОНКАКАФ до 20 лет): 1 events
+2026-02-24 18:50:46,361 [DEBUG] parser_nb_bet.kush.client: League 30871 (Чемпионат Кувейта): 1 events
+2026-02-24 18:50:48,195 [DEBUG] parser_nb_bet.kush.client: League 30856 (Чемпионат Нидерландов. Первый дивизион): 2 events
+2026-02-24 18:50:49,982 [DEBUG] parser_nb_bet.kush.client: League 29561 (Чемпионат Польши. Лига 2): 1 events
+2026-02-24 18:50:51,823 [DEBUG] parser_nb_bet.kush.client: League 30865 (Чемпионат Португалии до 23 лет): 4 events
+2026-02-24 18:50:53,645 [DEBUG] parser_nb_bet.kush.client: League 30659 (Чемпионат Саудовской Аравии. Дивизион 1): 5 events
+2026-02-24 18:50:55,462 [DEBUG] parser_nb_bet.kush.client: League 29500 (Чемпионат Саудовской Аравии. Премьер-лига): 3 events
+2026-02-24 18:50:57,254 [DEBUG] parser_nb_bet.kush.client: League 30062 (Чемпионат Северной Ирландии. Премьер-лига): 3 events
+2026-02-24 18:50:59,067 [DEBUG] parser_nb_bet.kush.client: League 32623 (Чемпионат Северной Ирландии. Чемпионшип): 2 events
+2026-02-24 18:51:00,849 [DEBUG] parser_nb_bet.kush.client: League 30660 (Чемпионат Уэльса. Чемпионшип. Север): 1 events
+2026-02-24 18:51:02,693 [DEBUG] parser_nb_bet.kush.client: League 29997 (Чемпионат Уэльса. Чемпионшип. Юг): 3 events
+2026-02-24 18:51:04,593 [DEBUG] parser_nb_bet.kush.client: League 31101 (Чемпионат Шотландии. Вторая лига): 3 events
+2026-02-24 18:51:06,266 [DEBUG] parser_nb_bet.kush.client: League 29456 (Чемпионат Шотландии. Премьер-лига): 1 events
+2026-02-24 18:51:08,090 [DEBUG] parser_nb_bet.kush.client: League 29489 (Чемпионат Шотландии. Челлендж Кап): 1 events
+2026-02-24 18:51:09,897 [DEBUG] parser_nb_bet.kush.client: League 30557 (Чемпионат Шотландии. Чемпионшип): 2 events
+2026-02-24 18:51:11,719 [DEBUG] parser_nb_bet.kush.client: League 29493 (Чемпионат ЮАР): 2 events
+2026-02-24 18:51:13,532 [DEBUG] parser_nb_bet.kush.client: League 44809 (Шотландия. Кубок Лоуленд лиги): 1 events
+2026-02-24 18:51:13,533 [INFO] parser_nb_bet.kush.client: Total Kush events fetched: 144 (day=0)
+2026-02-24 18:51:17,151 [DEBUG] parser_nb_bet.kush.client: League 29443 (Кубок Либертадорес): 3 events
+2026-02-24 18:51:18,973 [DEBUG] parser_nb_bet.kush.client: League 29436 (Лига Чемпионов УЕФА): 4 events
+2026-02-24 18:51:20,773 [DEBUG] parser_nb_bet.kush.client: League 42662 (Молодежная лига УЕФА): 6 events
+2026-02-24 18:51:22,573 [DEBUG] parser_nb_bet.kush.client: League 29454 (Чемпионат Англии. Чемпионшип): 4 events
+2026-02-24 18:51:24,393 [DEBUG] parser_nb_bet.kush.client: League 30824 (Чемпионат Аргентины. Примера дивизион): 6 events
+2026-02-24 18:51:26,203 [DEBUG] parser_nb_bet.kush.client: League 30793 (Чемпионат Египта. Премьер-лига): 3 events
+2026-02-24 18:51:28,021 [DEBUG] parser_nb_bet.kush.client: League 29465 (Чемпионат Испании. Второй дивизион): 1 events
+2026-02-24 18:51:30,184 [DEBUG] parser_nb_bet.kush.client: League 51523 (MLS+): 54 events
+2026-02-24 18:51:31,626 [DEBUG] parser_nb_bet.kush.client: League 54106 (Индия. Кубок МФА): 1 events
+2026-02-24 18:51:33,441 [DEBUG] parser_nb_bet.kush.client: League 34517 (Исландия. Кубок Лиги): 1 events
+2026-02-24 18:51:35,242 [DEBUG] parser_nb_bet.kush.client: League 29916 (Кубок Аргентины): 2 events
+2026-02-24 18:51:37,047 [DEBUG] parser_nb_bet.kush.client: League 35114 (Кубок Боснии и Герцеговины): 3 events
+2026-02-24 18:51:38,867 [DEBUG] parser_nb_bet.kush.client: League 34501 (Кубок Бразилии): 3 events
+2026-02-24 18:51:40,672 [DEBUG] parser_nb_bet.kush.client: League 34839 (Кубок Камбоджи): 2 events
+2026-02-24 18:51:42,481 [DEBUG] parser_nb_bet.kush.client: League 33218 (Кубок Мальты. Трофей ФА): 2 events
+2026-02-24 18:51:44,269 [DEBUG] parser_nb_bet.kush.client: League 32305 (Кубок Северной Македонии): 1 events
+2026-02-24 18:51:46,113 [DEBUG] parser_nb_bet.kush.client: League 31161 (Кубок Таиланда): 4 events
+2026-02-24 18:51:47,914 [DEBUG] parser_nb_bet.kush.client: League 33613 (Кубок Уганды): 3 events
+2026-02-24 18:51:49,714 [DEBUG] parser_nb_bet.kush.client: League 52738 (Кубок Чемпионов КОНКАКАФ): 2 events
+2026-02-24 18:51:51,514 [DEBUG] parser_nb_bet.kush.client: League 58612 (Сальвадор. Кубок Президента): 1 events
+2026-02-24 18:51:53,315 [DEBUG] parser_nb_bet.kush.client: League 30374 (Чемпионат Австрии. Женщины): 1 events
+2026-02-24 18:51:55,121 [DEBUG] parser_nb_bet.kush.client: League 30867 (Чемпионат Азербайджана. Первый дивизион): 3 events
+2026-02-24 18:51:56,913 [DEBUG] parser_nb_bet.kush.client: League 30107 (Чемпионат Алжира. Дивизион 2): 1 events
+2026-02-24 18:51:58,720 [DEBUG] parser_nb_bet.kush.client: League 46966 (Чемпионат Англии до 21 года. Лига развития): 1 events
+2026-02-24 18:52:00,573 [DEBUG] parser_nb_bet.kush.client: League 29488 (Чемпионат Англии. Национальная лига): 6 events
+2026-02-24 18:52:02,378 [DEBUG] parser_nb_bet.kush.client: League 31342 (Чемпионат Англии. Северная лига. Дивизион 1): 2 events
+2026-02-24 18:52:04,165 [DEBUG] parser_nb_bet.kush.client: League 29515 (Чемпионат Англии. Южная Национальная лига): 1 events
+2026-02-24 18:52:05,970 [DEBUG] parser_nb_bet.kush.client: League 29505 (Чемпионат Англии. Южная Премьер-лига. Юг): 1 events
+2026-02-24 18:52:07,800 [DEBUG] parser_nb_bet.kush.client: League 34403 (Чемпионат Барбадоса. Премьер-лига): 2 events
+2026-02-24 18:52:09,627 [DEBUG] parser_nb_bet.kush.client: League 30338 (Чемпионат Бразилии до 20 лет): 3 events
+2026-02-24 18:52:11,397 [DEBUG] parser_nb_bet.kush.client: League 34432 (Чемпионат Бразилии. Лига Акриано): 1 events
+2026-02-24 18:52:13,215 [DEBUG] parser_nb_bet.kush.client: League 34241 (Чемпионат Бразилии. Лига Паулиста А2): 2 events
+2026-02-24 18:52:15,017 [DEBUG] parser_nb_bet.kush.client: League 30963 (Чемпионат Гватемалы. Национальная лига): 2 events
+2026-02-24 18:52:16,836 [DEBUG] parser_nb_bet.kush.client: League 30911 (Чемпионат Германии. Региональная лига. Север-Восток): 1 events
+2026-02-24 18:52:18,631 [DEBUG] parser_nb_bet.kush.client: League 29512 (Чемпионат Германии. Региональная лига. Юго-запад): 1 events
+2026-02-24 18:52:20,438 [DEBUG] parser_nb_bet.kush.client: League 30235 (Чемпионат Гондураса): 1 events
+2026-02-24 18:52:22,271 [DEBUG] parser_nb_bet.kush.client: League 44992 (Чемпионат Гондураса. Резервная лига): 4 events
+2026-02-24 18:52:24,084 [DEBUG] parser_nb_bet.kush.client: League 54891 (Чемпионат Гонконга. Премьер-лига до 22 лет): 5 events
+2026-02-24 18:52:25,865 [DEBUG] parser_nb_bet.kush.client: League 56873 (Чемпионат Индонезии. Суперлига): 1 events
+2026-02-24 18:52:27,670 [DEBUG] parser_nb_bet.kush.client: League 35148 (Чемпионат Иордании): 2 events
+2026-02-24 18:52:29,474 [DEBUG] parser_nb_bet.kush.client: League 42389 (Чемпионат Испании. Второй дивизион RFEF. Группа 4): 2 events
+2026-02-24 18:52:31,281 [DEBUG] parser_nb_bet.kush.client: League 42268 (Чемпионат Испании. Первый дивизион RFEF. Группа 2): 2 events
+2026-02-24 18:52:33,093 [DEBUG] parser_nb_bet.kush.client: League 42566 (Чемпионат Испании. Третий дивизион RFEF. Группа 10): 2 events
+2026-02-24 18:52:34,905 [DEBUG] parser_nb_bet.kush.client: League 42568 (Чемпионат Испании. Третий дивизион RFEF. Группа 14): 1 events
+2026-02-24 18:52:36,771 [DEBUG] parser_nb_bet.kush.client: League 42699 (Чемпионат Испании. Третий дивизион RFEF. Группа 3): 4 events
+2026-02-24 18:52:38,532 [DEBUG] parser_nb_bet.kush.client: League 30936 (Чемпионат Камеруна. Премьер Дивизион): 1 events
+2026-02-24 18:52:40,356 [DEBUG] parser_nb_bet.kush.client: League 30002 (Чемпионат Колумбии. Примера B): 1 events
+2026-02-24 18:52:42,189 [DEBUG] parser_nb_bet.kush.client: League 34778 (Чемпионат КОНКАКАФ до 20 лет): 3 events
+2026-02-24 18:52:43,970 [DEBUG] parser_nb_bet.kush.client: League 31336 (Чемпионат Кот-д'Ивуара): 1 events
+2026-02-24 18:52:45,793 [DEBUG] parser_nb_bet.kush.client: League 30877 (Чемпионат ОАЭ): 2 events
+2026-02-24 18:52:47,603 [DEBUG] parser_nb_bet.kush.client: League 30870 (Чемпионат Омана): 1 events
+2026-02-24 18:52:49,412 [DEBUG] parser_nb_bet.kush.client: League 30865 (Чемпионат Португалии до 23 лет): 2 events
+2026-02-24 18:52:51,228 [DEBUG] parser_nb_bet.kush.client: League 30659 (Чемпионат Саудовской Аравии. Дивизион 1): 4 events
+2026-02-24 18:52:53,000 [DEBUG] parser_nb_bet.kush.client: League 29500 (Чемпионат Саудовской Аравии. Премьер-лига): 2 events
+2026-02-24 18:52:54,808 [DEBUG] parser_nb_bet.kush.client: League 31020 (Чемпионат Таиланда. Премьер-лига): 1 events
+2026-02-24 18:52:56,598 [DEBUG] parser_nb_bet.kush.client: League 31233 (Чемпионат Туниса): 1 events
+2026-02-24 18:52:58,404 [DEBUG] parser_nb_bet.kush.client: League 30943 (Чемпионат Турции до 19 лет): 2 events
+2026-02-24 18:53:00,210 [DEBUG] parser_nb_bet.kush.client: League 30660 (Чемпионат Уэльса. Чемпионшип. Север): 1 events
+2026-02-24 18:53:02,022 [DEBUG] parser_nb_bet.kush.client: League 30946 (Чемпионат Черногории. Пeрвая лига): 1 events
+2026-02-24 18:53:03,819 [DEBUG] parser_nb_bet.kush.client: League 29947 (Чемпионат Швейцарии): 1 events
+2026-02-24 18:53:05,625 [DEBUG] parser_nb_bet.kush.client: League 29489 (Чемпионат Шотландии. Челлендж Кап): 1 events
+2026-02-24 18:53:07,440 [DEBUG] parser_nb_bet.kush.client: League 30025 (Чемпионат Ямайки. Премьер-лига): 1 events
+2026-02-24 18:53:09,247 [DEBUG] parser_nb_bet.kush.client: League 58571 (Япония. Лига Столетнего видения. Второй и Третий дивизионы): 1 events
+2026-02-24 18:53:09,247 [INFO] parser_nb_bet.kush.client: Total Kush events fetched: 185 (day=1)
+2026-02-24 18:53:09,298 [DEBUG] parser_nb_bet.kush.matcher: Matched test \u2194 6472456 (confidence=0.91)
+FOUND: eid=6472456 [РЎРµРЅС‚СЂР°Р»СЊ РљРѕСЂРґРѕР±Р° РґРµ РЎР°РЅС‚СЊСЏРіРѕ vs РўР°Р»СЊРµСЂРµСЃ РљРѕСЂРґРѕРІР°] url=/event/6472456-sentral-kordoba-de-santyago-taleres-kordova
+  confidence=0.91 name_score=0.89 time_score=0.95 swapped=False

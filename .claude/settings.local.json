@@ -1,0 +1,32 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cd:*)",
+      "Bash(tail:*)",
+      "Bash(dotnet:*)",
+      "Bash(find:*)",
+      "Bash(true:*)",
+      "Bash(cd D:/cody/Freelance/parser_nb-bet && rm -rf dist/ && dotnet publish src/ParserNbBet/ParserNbBet.csproj --configuration Release --runtime win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true --output dist/ 2>&1)",
+      "Bash(ls:*)",
+      "Bash(sort -k2)",
+      "Bash(sort:*)",
+      "Bash(git:*)",
+      "Bash(where python:*)",
+      "Bash(cd /d/cody/Freelance/parser_nb-bet && python -m pytest tests/ -v 2>&1)",
+      "Bash(cd /d/cody/Freelance/parser_nb-bet && python -m src.main --once --dry-run 2>&1)",
+      "Bash(cd /d/cody/Freelance/parser_nb-bet && python src/main.py --once --dry-run 2>&1)",
+      "Bash(cd /d/cody/Freelance/parser_nb-bet && python -m pytest tests/test_nb_client.py -v 2>&1)",
+      "Bash(cd /d/cody/Freelance/parser_nb-bet && python -m pytest tests/test_decision.py -v 2>&1)",
+      "Bash(cd /d/cody/Freelance/parser_nb-bet && python -m pytest tests/test_normalizer.py tests/test_matcher.py -v 2>&1)",
+      "Bash(cd /d/cody/Freelance/parser_nb-bet && python -m pytest tests/test_kush_client.py -v 2>&1)",
+      "Bash(cd /d/cody/Freelance/parser_nb-bet && python -m pytest tests/test_bet_placer.py -v --tb=short 2>&1)",
+      "Bash(head:*)",
+      "Bash(cd /d/cody/Freelance/parser_nb-bet && python -m pytest tests/test_telegram.py tests/test_e2e.py -v --tb=short 2>&1)",
+      "Bash(cd /d/cody/Freelance/parser_nb-bet && python -m PyInstaller parser_nb-bet.spec --clean --noconfirm 2>&1)",
+      "Bash(cd /d/cody/Freelance/parser_nb-bet && ./upx.exe --best --lzma --force dist/parser_nb-bet.exe 2>&1)",
+      "Bash(cd /d/cody/Freelance/parser_nb-bet && ./upx.exe --lzma --best dist/parser_nb-bet.exe 2>&1)",
+      "WebFetch(domain:nb-bet.com)",
+      "Bash(python:*)"
+    ]
+  }
+}

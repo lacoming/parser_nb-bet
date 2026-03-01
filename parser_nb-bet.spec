@@ -27,8 +27,6 @@ a = Analysis(
         'lxml.objectify', 'lxml.html.diff', 'lxml.html.clean', 'lxml.isoschematron',
         'lxml.sax', 'lxml.builder',
         'xlsxwriter',
-        'openpyxl.chart', 'openpyxl.chartsheet', 'openpyxl.drawing',
-        'openpyxl.pivot', 'openpyxl.comments',
     ],
     noarchive=False,
     optimize=0,

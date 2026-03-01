@@ -1,0 +1,17 @@
+        <div class="basketBet">
+            <div class="basketHide w-100 mainBackground greenBackground">
+                <div class="container text-center">
+                    <div class="row align-items-center">
+                        <div class="col-12 faf py-1">
+                            <div class="fs16 medium d-inline-block mr-0 mr-sm-5"><i aria-hidden="true" class="icon-ks-win fs20 block2MainHeader"></i> Прогноз успешно добавлен</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <script type="application/javascript">
+            ym(12136738,'reachGoal','createCoupon', {type: 'prematch'});
+            $(".basketBet").delay(3000).fadeOut("slow", function() {
+                $(this).remove();
+            });
+        </script>
