@@ -23,9 +23,11 @@ class AppState:
         self._placed: set[str] = set()
         self._known: set[str] = set()
         self._processed: set[str] = set()  # all fully processed (placed/rejected/missing)
-        self._ratio_rejected: set[str] = set()  # ratio-rejected (NOT processed → recheck)
-        self._far_pending: set[str] = set()  # far-future matches (NOT processed → recheck)
+        self._ratio_rejected: set[str] = set()  # ratio-rejected (NOT processed -> recheck)
+        self._far_pending: set[str] = set()  # far-future matches (NOT processed -> recheck)
         self._nb_placed: set[str] = set()  # NB-Bet tips placed (dedup)
+        self._tg_notified_kush: set[str] = set()  # TG notifications about Kush bets (dedup)
+        self._was_pending: set[str] = set()  # matches previously in pending/missing state
         self._recheck_interval = recheck_interval  # seconds between rechecks
         self._max_checks = max_checks  # max rechecks before expiry
 
@@ -35,6 +37,7 @@ class AppState:
             return False
         self._pending[match_key] = PendingEntry(match_key=match_key, bet_types=bet_types)
         self._known.add(match_key)
+        self._was_pending.add(match_key)
         return True
 
     def get_due_pending(self) -> list[PendingEntry]:
@@ -125,3 +128,14 @@ class AppState:
     @property
     def ratio_rejected_count(self) -> int:
         return len(self._ratio_rejected)
+
+    def record_tg_notified_kush(self, match_key: str) -> bool:
+        """Record a Kush TG notification. Returns True if new (not sent before)."""
+        if match_key in self._tg_notified_kush:
+            return False
+        self._tg_notified_kush.add(match_key)
+        return True
+
+    def was_previously_pending(self, match_key: str) -> bool:
+        """Check if match was previously in pending/missing state."""
+        return match_key in self._was_pending

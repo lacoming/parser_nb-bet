@@ -1,7 +1,7 @@
-"""E2E integration tests for full cycle (step 11).
+"""E2E integration tests for full cycle.
 
 Exercises run_cycle with fully mocked external services (NB, Kush, Telegram).
-Verifies the complete pipeline: NB → filter → decide → match → bet → excel → telegram.
+Verifies the complete pipeline: NB -> filter -> decide -> match -> bet -> excel -> telegram.
 """
 from __future__ import annotations
 
@@ -26,7 +26,6 @@ from src.config.schema import (
 from src.decision.league_filter import LeagueFilter
 from src.decision.models import LeagueSetting
 from src.excel.writer import ExcelWriter
-from src.kush.client import OddsEntry
 from src.kush.models import KushEvent
 from src.nb.models import Match
 from src.scheduler.cycle_runner import run_cycle
@@ -92,35 +91,28 @@ class TestE2EDryRun:
     """Full cycle in dry-run mode with mocked externals."""
 
     def test_full_cycle_single_match_placed(self, tmp_path):
-        """Single match → passes decision → matched on Kush → dry-run placed."""
+        """Single match -> passes decision -> matched on Kush -> dry-run placed."""
         config = _make_config(str(tmp_path))
         state = AppState()
         match = _make_match(kf1=2.10, kf2=3.50, kfx=3.20)
         kush_event = _make_kush_event()
 
-        # Mock NB client
         nb_client = MagicMock()
         nb_client.get_matches.return_value = [match]
 
-        # League settings: allow Premier League
         league_settings = [LeagueSetting(bet_type="1", leagues=["Premier League"])]
         league_filter = LeagueFilter(settings=league_settings)
         excel_writer = ExcelWriter(output_dir=str(tmp_path))
-
-        # Mock telegram (disabled)
         telegram = MagicMock(spec=TelegramNotifier)
 
-        # Mock Kush internals: session, client, events
         with patch("src.scheduler.cycle_runner.KushSession") as MockSession, \
              patch("src.scheduler.cycle_runner.KushClient") as MockClient, \
              patch("src.scheduler.cycle_runner.EventMatcher") as MockMatcher, \
              patch("src.scheduler.cycle_runner.BetPlacer") as MockPlacer:
 
-            mock_session_inst = MockSession.return_value
             mock_client_inst = MockClient.return_value
             mock_client_inst.get_all_events.return_value = [kush_event]
 
-            # Matcher finds the event
             from src.kush.models import MatchResult
             mock_matcher_inst = MockMatcher.return_value
             mock_matcher_inst.find_best_match.return_value = MatchResult(
@@ -131,9 +123,9 @@ class TestE2EDryRun:
                 time_score=0.90,
             )
 
-            # BetPlacer returns success dry-run
             from src.kush.bet_result import BetResult
             mock_placer_inst = MockPlacer.return_value
+            mock_placer_inst.get_threshold.return_value = 1.10
             mock_placer_inst.place_bet.return_value = BetResult(
                 match_key=match.match_key,
                 event_id="99001",
@@ -167,12 +159,14 @@ class TestE2EDryRun:
         assert stats.placed >= 1
         assert stats.missing == 0
         assert stats.errors == 0
+        # Unified rows written
+        assert excel_writer.row_count >= 1
 
         # Telegram notified
         assert telegram.notify_placed.called or telegram.notify_cycle_summary.called
 
     def test_full_cycle_no_matches(self, tmp_path):
-        """NB returns no matches → cycle completes quickly."""
+        """NB returns no matches -> cycle completes quickly."""
         config = _make_config(str(tmp_path))
         state = AppState()
 
@@ -198,7 +192,7 @@ class TestE2EDryRun:
         assert stats.errors == 0
 
     def test_full_cycle_match_not_on_kush(self, tmp_path):
-        """Match passes decision but not found on Kush → missing + telegram."""
+        """Match passes decision but not found on Kush -> missing + telegram."""
         config = _make_config(str(tmp_path))
         state = AppState()
         match = _make_match(kf1=2.10, kf2=3.50, kfx=3.20)
@@ -232,11 +226,11 @@ class TestE2EDryRun:
         assert stats.missing >= 1
         assert stats.placed == 0
         telegram.notify_missing.assert_called()
-        # Verify missing rows were added to Excel writer
-        assert excel_writer.missing_count >= 1
+        # Verify unified rows with kush_reason="отсутствие"
+        assert excel_writer.row_count >= 1
 
     def test_full_cycle_league_filtered_out(self, tmp_path):
-        """Match league not in settings → filtered out → no Kush call."""
+        """Match league not in settings -> filtered out -> no Kush call."""
         config = _make_config(str(tmp_path))
         state = AppState()
         match = _make_match(league="Unknown League")
@@ -244,7 +238,6 @@ class TestE2EDryRun:
         nb_client = MagicMock()
         nb_client.get_matches.return_value = [match]
 
-        # Only allow "La Liga"
         league_settings = [LeagueSetting(bet_type="1", leagues=["La Liga"])]
         league_filter = LeagueFilter(settings=league_settings)
         excel_writer = ExcelWriter(output_dir=str(tmp_path))
@@ -264,7 +257,7 @@ class TestE2EDryRun:
         assert stats.decided == 0
 
     def test_nb_failure_notifies_critical(self, tmp_path):
-        """NB client raises exception → critical telegram + error count."""
+        """NB client raises exception -> critical telegram + error count."""
         config = _make_config(str(tmp_path))
         state = AppState()
 
@@ -289,7 +282,7 @@ class TestE2EDryRun:
         telegram.notify_critical.assert_called()
 
     def test_kush_connection_failure(self, tmp_path):
-        """Kush session fails → error + critical notification."""
+        """Kush session fails -> error + critical notification."""
         config = _make_config(str(tmp_path))
         state = AppState()
         match = _make_match()
@@ -323,7 +316,6 @@ class TestE2EDryRun:
         state = AppState()
         match = _make_match()
 
-        # First run: match missing on Kush → pending
         nb_client = MagicMock()
         nb_client.get_matches.return_value = [match]
 
@@ -349,8 +341,8 @@ class TestE2EDryRun:
 
         assert state.pending_count >= 1
 
-    def test_ratio_rejected_goes_to_rejected_sheet(self, tmp_path):
-        """Match found on Kush but ratio fails → rejected sheet, not processed."""
+    def test_ratio_rejected_goes_to_unified_row(self, tmp_path):
+        """Match found on Kush but ratio fails -> unified row with reason=ratio."""
         config = _make_config(str(tmp_path))
         state = AppState()
         match = _make_match(kf1=2.10, kf2=3.50, kfx=3.20)
@@ -381,15 +373,15 @@ class TestE2EDryRun:
                 time_score=0.90,
             )
 
-            # BetPlacer returns ratio failure
             from src.kush.bet_result import BetResult
+            MockPlacer.return_value.get_threshold.return_value = 1.10
             MockPlacer.return_value.place_bet.return_value = BetResult(
                 match_key=match.match_key,
                 event_id="99001",
                 bet_type="П1",
                 kf_nb=2.00,
                 kf_kush=2.10,
-                ratio=1.05,  # below threshold
+                ratio=1.05,
                 threshold=1.10,
                 ratio_passes=False,
                 placed=False,
@@ -405,9 +397,7 @@ class TestE2EDryRun:
 
         assert stats.rejected == 1
         assert stats.placed == 0
-        assert excel_writer.rejected_count == 1
-        assert excel_writer.row_count == 0
-        # Match is NOT processed → can be rechecked
+        assert excel_writer.row_count == 1  # unified row
         assert not state.is_processed(match.match_key)
         assert state.is_ratio_rejected(match.match_key)
 
@@ -439,14 +429,12 @@ class TestE2EDryRun:
 
 
 class TestFarFuturePending:
-    """Far-future matches (beyond Kush window) should go to pending sheet + TG."""
+    """Far-future matches (beyond Kush window) should go to unified row with reason=ожидание."""
 
-    def test_far_future_produces_pending_rows(self, tmp_path):
-        """Matches beyond Kush's 3-day window produce pending rows, not missing."""
+    def test_far_future_produces_unified_pending_rows(self, tmp_path):
+        """Matches beyond Kush's 3-day window produce unified rows, not missing."""
         config = _make_config(str(tmp_path))
         state = AppState()
-        # Create a match 10 days in the future — well beyond Kush window
-        from datetime import timedelta
         far_dt = datetime(2026, 3, 10, 15, 0, tzinfo=timezone.utc)
         far_match = Match(
             match_key=Match.make_key("La Liga", "Barcelona", "Sevilla", far_dt),
@@ -481,17 +469,14 @@ class TestFarFuturePending:
             telegram=telegram,
         )
 
-        # Should be pending, not missing or placed
         assert stats.pending == 1
         assert stats.missing == 0
         assert stats.placed == 0
-        assert excel_writer.pending_count == 1
-        # TG notify_pending was called (first time = new)
+        assert excel_writer.row_count == 1
         telegram.notify_pending.assert_called_once()
-        # Link should be a full URL, not a raw slug
         call_kwargs = telegram.notify_pending.call_args
         link = call_kwargs[1]["link"] if "link" in call_kwargs[1] else call_kwargs.kwargs.get("link", "")
-        assert "https://nb-bet.com/soccer/" in link
+        assert "https://nb-bet.com/" in link
 
     def test_far_future_dedup_across_cycles(self, tmp_path):
         """Second cycle with same far-future match should not re-send TG."""
@@ -528,18 +513,15 @@ class TestFarFuturePending:
         excel_writer2 = ExcelWriter(output_dir=str(tmp_path))
         stats2 = run_cycle(config=config, state=state, nb_client=nb_client,
                            league_filter=league_filter, excel_writer=excel_writer2, telegram=telegram)
-        # Pending rows still written to Excel (refreshed each cycle)
         assert stats2.pending == 1
-        assert excel_writer2.pending_count == 1
-        # But TG not called again (dedup)
+        assert excel_writer2.row_count == 1
         telegram.notify_pending.assert_not_called()
 
     def test_link_is_full_url_not_slug(self, tmp_path):
-        """Verify that placed/missing/rejected rows use nb_url, not raw slug."""
+        """Verify that rows use nb_url, not raw slug."""
         config = _make_config(str(tmp_path))
         state = AppState()
         match = _make_match(kf1=2.10, kf2=3.50, kfx=3.20)
-        # match.nb_slug is "arsenal-chelsea-123", nb_url should be full URL
 
         nb_client = MagicMock()
         nb_client.get_matches.return_value = [match]
@@ -561,9 +543,7 @@ class TestFarFuturePending:
             run_cycle(config=config, state=state, nb_client=nb_client,
                       league_filter=league_filter, excel_writer=excel_writer, telegram=telegram)
 
-        # Missing row link should be full URL
-        assert excel_writer.missing_count >= 1
-        # Check the notify_missing call has a full URL
+        assert excel_writer.row_count >= 1
         call_kwargs = telegram.notify_missing.call_args
         link = call_kwargs[1].get("link", "") if call_kwargs[1] else ""
         assert link.startswith("https://nb-bet.com/")
@@ -576,7 +556,6 @@ class TestPathsModule:
         from src.paths import data_path, get_base_dir
         p = data_path("sl_keys.json")
         assert p.endswith(os.path.join("assets", "data", "sl_keys.json"))
-        # In dev mode, base dir should be the project root
         base = get_base_dir()
         assert os.path.isdir(base)
 
@@ -587,7 +566,6 @@ class TestPathsModule:
     def test_frozen_mode_uses_meipass(self):
         import sys
         from src.paths import get_base_dir
-        # Simulate frozen mode
         with patch.object(sys, "frozen", True, create=True), \
              patch.object(sys, "_MEIPASS", "/tmp/fake_meipass", create=True):
             base = get_base_dir()

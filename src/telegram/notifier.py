@@ -155,6 +155,7 @@ class TelegramNotifier:
         odds_x: str = "",
         odds_2: str = "",
         link: str = "",
+        was_pending: bool = False,
     ) -> list[SendResult]:
         """Notify about a placed (or dry-run) bet."""
         esc = escape_md2
@@ -168,6 +169,8 @@ class TelegramNotifier:
             f"{esc(bet_type)}, КфКуша: `{kf_kush:.2f}`",
             f"Ratio: `{ratio:.2f}`",
         ]
+        if was_pending:
+            lines.append("_ранее ожидала_")
         if link:
             lines.append(esc(link))
         text = "\n".join(lines)

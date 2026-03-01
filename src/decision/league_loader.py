@@ -40,6 +40,9 @@ def find_leagues_xlsx(search_dir: str) -> Optional[str]:
         name_lower = p.name.lower()
         if any(name_lower.startswith(pref) for pref in _EXCLUDE_PREFIXES):
             continue
+        # C2 fix: exclude monthly result files like 2026-03_results.xlsx
+        if re.match(r"^\d{4}-\d{2}_", p.name):
+            continue
         log.info("Auto-discovered leagues xlsx: %s", p)
         return str(p)
 

@@ -135,3 +135,44 @@ class TestFarPending:
         state = AppState()
         state.record_far_pending("key1")
         assert state.is_known("key1") is False
+
+
+class TestTgNotifiedKush:
+    def test_record_new(self):
+        state = AppState()
+        assert state.record_tg_notified_kush("key1") is True
+
+    def test_record_duplicate(self):
+        state = AppState()
+        state.record_tg_notified_kush("key1")
+        assert state.record_tg_notified_kush("key1") is False
+
+    def test_different_keys(self):
+        state = AppState()
+        assert state.record_tg_notified_kush("key1") is True
+        assert state.record_tg_notified_kush("key2") is True
+
+
+class TestWasPending:
+    def test_enqueue_tracks_was_pending(self):
+        state = AppState()
+        state.enqueue_pending("key1", ["1X"])
+        assert state.was_previously_pending("key1") is True
+
+    def test_not_pending_returns_false(self):
+        state = AppState()
+        assert state.was_previously_pending("key1") is False
+
+    def test_was_pending_persists_after_remove(self):
+        """was_pending should persist even after match is removed from pending."""
+        state = AppState()
+        state.enqueue_pending("key1", ["1X"])
+        state.remove_pending("key1")
+        assert state.was_previously_pending("key1") is True
+
+    def test_was_pending_persists_after_placed(self):
+        """was_pending should persist even after match is placed."""
+        state = AppState()
+        state.enqueue_pending("key1", ["1X"])
+        state.record_placed("key1")
+        assert state.was_previously_pending("key1") is True

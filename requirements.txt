@@ -10,11 +10,8 @@ lxml>=5.0.0
 # Fuzzy matching (team names)
 rapidfuzz>=3.5.0
 
-# Excel read (leagues.xlsx)
+# Excel read + write (leagues.xlsx + results)
 openpyxl>=3.1.0
-
-# Excel write (results)
-xlsxwriter>=3.1.0
 
 # Dev / testing
 pytest>=8.0.0

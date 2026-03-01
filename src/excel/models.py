@@ -1,215 +1,59 @@
-"""Excel row data models."""
+"""Excel row data models — unified 18-column format."""
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
 
 
 @dataclass
-class ExcelRow:
-    """One row of output Excel data.
+class UnifiedRow:
+    """Single unified row for Excel output (18 columns per customer template).
 
-    Fields map to legacy columns:
-    A=date, B=time, C=league, D=home, E=away,
-    F-I=scores, J-O=odds(start/end), P-S=exact score,
-    T-V=match prop, W-Y=player prop, Z=link,
-    AA=bet_type, AB=kf_kush, AC=ratio
+    Scenarios:
+      - Bet placed on Kush:  kush_placed="+", kush_reason="",
+                              kf_kush=value, kush_date/time=timestamp
+      - Missing on Kush:     kush_placed="-", kush_reason="отсутствие"
+      - Ratio rejected:      kush_placed="-", kush_reason="ratio", kf_kush=value
+      - Far-future (pending): kush_placed="-", kush_reason="ожидание"
     """
 
-    # Basic match info
-    date: str = ""  # DD.MM.YYYY
-    time: str = ""  # HH:MM
-    league: str = ""
-    team_home: str = ""
-    team_away: str = ""
-
-    # Scores
-    score_home: str = ""
-    score_away: str = ""
-    score_total: str = ""
-    score_diff: str = ""
-
-    # Odds (1X2) — start / end
-    odds_1_start: str = ""
-    odds_1_end: str = ""
-    odds_x_start: str = ""
-    odds_x_end: str = ""
-    odds_2_start: str = ""
-    odds_2_end: str = ""
-
-    # Exact score props
-    exact_score_home: str = ""
-    exact_score_away: str = ""
-    exact_score_kf_start: str = ""
-    exact_score_kf_end: str = ""
-
-    # Match prop (МП)
-    mp_name: str = ""
-    mp_kf_start: str = ""
-    mp_kf_end: str = ""
-
-    # Player prop (ПП)
-    pp_name: str = ""
-    pp_kf_start: str = ""
-    pp_kf_end: str = ""
-
-    # Link / slug
-    link: str = ""
-
-    # Bet result (added by our system)
-    bet_type: str = ""  # "П1", "П2", "X", "1X"
-    kf_kush: str = ""
-    ratio: str = ""
+    date: str = ""              # 1  Дата (DD.MM.YYYY)
+    time: str = ""              # 2  Время (HH:MM)
+    league: str = ""            # 3  Лига
+    team_home: str = ""         # 4  Дома
+    team_away: str = ""         # 5  Гости
+    bet_type: str = ""          # 6  Ставка (1, 2, X, 1X)
+    kf1_start: str = ""         # 7  Kf1 старт
+    kfx_start: str = ""         # 8  KfX старт
+    kf2_start: str = ""         # 9  Kf2 старт
+    kf_nb: str = ""             # 10 KfNB
+    min_kf_kush: str = ""       # 11 Мин KfKush
+    nb_placed: str = ""         # 12 Ставка на НБ (+ / -)
+    kush_placed: str = ""       # 13 Ставка на Куш (+ / -)
+    kush_reason: str = ""       # 14 основания для - на куше
+    kf_kush: str = ""           # 15 кф куша
+    kush_date: str = ""         # 16 Дата ставки Куш (DD.MM.YYYY)
+    kush_time: str = ""         # 17 Время ставки Куш (HH:MM)
+    link: str = ""              # 18 Ссылка
 
     def as_list(self) -> list[str]:
-        """Return row values in column order."""
+        """Return row values in column order (18 items)."""
         return [
             self.date,
             self.time,
             self.league,
             self.team_home,
             self.team_away,
-            self.score_home,
-            self.score_away,
-            self.score_total,
-            self.score_diff,
-            self.odds_1_start,
-            self.odds_1_end,
-            self.odds_x_start,
-            self.odds_x_end,
-            self.odds_2_start,
-            self.odds_2_end,
-            self.exact_score_home,
-            self.exact_score_away,
-            self.exact_score_kf_start,
-            self.exact_score_kf_end,
-            self.mp_name,
-            self.mp_kf_start,
-            self.mp_kf_end,
-            self.pp_name,
-            self.pp_kf_start,
-            self.pp_kf_end,
-            self.link,
             self.bet_type,
+            self.kf1_start,
+            self.kfx_start,
+            self.kf2_start,
+            self.kf_nb,
+            self.min_kf_kush,
+            self.nb_placed,
+            self.kush_placed,
+            self.kush_reason,
             self.kf_kush,
-            self.ratio,
+            self.kush_date,
+            self.kush_time,
+            self.link,
         ]
-
-
-@dataclass
-class MissingRow:
-    """Row for matches not found on Kush (written to 'НЕ НАЙДЕНО' sheet)."""
-
-    date: str = ""  # DD.MM.YYYY
-    time: str = ""  # HH:MM
-    league: str = ""
-    team_home: str = ""
-    team_away: str = ""
-    bet_type: str = ""
-    odds_1_start: str = ""
-    odds_x_start: str = ""
-    odds_2_start: str = ""
-    kf_nb: str = ""
-    min_kf_kush: str = ""
-    link: str = ""
-
-    def as_list(self) -> list[str]:
-        return [
-            self.date, self.time, self.league,
-            self.team_home, self.team_away, self.bet_type,
-            self.odds_1_start, self.odds_x_start, self.odds_2_start,
-            self.kf_nb, self.min_kf_kush, self.link,
-        ]
-
-    @staticmethod
-    def headers() -> list[str]:
-        return [
-            "Дата", "Время", "Лига",
-            "Дома", "Гости", "Ставка",
-            "Kf1 старт", "KfX старт", "Kf2 старт",
-            "KfNB", "Мин KfKush", "Ссылка",
-        ]
-
-    @staticmethod
-    def widths() -> list[float]:
-        return [12, 8, 25, 20, 20, 8, 10, 10, 10, 10, 12, 30]
-
-
-@dataclass
-class RejectedRow:
-    """Row for matches rejected by ratio check (written to 'ОТКЛОНЕНО' sheet)."""
-
-    date: str = ""  # DD.MM.YYYY
-    time: str = ""  # HH:MM
-    league: str = ""
-    team_home: str = ""
-    team_away: str = ""
-    bet_type: str = ""
-    odds_1_start: str = ""
-    odds_x_start: str = ""
-    odds_2_start: str = ""
-    kf_nb: str = ""
-    kf_kush: str = ""
-    ratio: str = ""
-    threshold: str = ""
-    link: str = ""
-
-    def as_list(self) -> list[str]:
-        return [
-            self.date, self.time, self.league,
-            self.team_home, self.team_away, self.bet_type,
-            self.odds_1_start, self.odds_x_start, self.odds_2_start,
-            self.kf_nb, self.kf_kush, self.ratio, self.threshold, self.link,
-        ]
-
-    @staticmethod
-    def headers() -> list[str]:
-        return [
-            "Дата", "Время", "Лига",
-            "Дома", "Гости", "Ставка",
-            "Kf1 старт", "KfX старт", "Kf2 старт",
-            "KfNB", "KfKush", "Ratio", "Порог", "Ссылка",
-        ]
-
-    @staticmethod
-    def widths() -> list[float]:
-        return [12, 8, 25, 20, 20, 8, 10, 10, 10, 10, 10, 10, 10, 30]
-
-
-@dataclass
-class PendingRow:
-    """Row for far-future matches awaiting Kush window (written to 'Ожидающие' sheet)."""
-
-    date: str = ""  # DD.MM.YYYY
-    time: str = ""  # HH:MM
-    league: str = ""
-    team_home: str = ""
-    team_away: str = ""
-    bet_type: str = ""
-    odds_1_start: str = ""
-    odds_x_start: str = ""
-    odds_2_start: str = ""
-    kf_nb: str = ""
-    min_kf_kush: str = ""
-    link: str = ""
-
-    def as_list(self) -> list[str]:
-        return [
-            self.date, self.time, self.league,
-            self.team_home, self.team_away, self.bet_type,
-            self.odds_1_start, self.odds_x_start, self.odds_2_start,
-            self.kf_nb, self.min_kf_kush, self.link,
-        ]
-
-    @staticmethod
-    def headers() -> list[str]:
-        return [
-            "Дата", "Время", "Лига",
-            "Дома", "Гости", "Ставка",
-            "Kf1 старт", "KfX старт", "Kf2 старт",
-            "KfNB", "Мин KfKush", "Ссылка",
-        ]
-
-    @staticmethod
-    def widths() -> list[float]:
-        return [12, 8, 25, 20, 20, 8, 10, 10, 10, 10, 12, 30]

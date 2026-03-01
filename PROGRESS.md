@@ -244,3 +244,29 @@ C# код остаётся в ветке `main`/`master` как бэкап.
 - `scheduler/cycle_runner.py` — `setting.check()` вызывается с `odds_*_start` (2 места)
 - `decision/league_filter.py` — `get_decisions()`: kf1/kf2 из `odds_*_start`
 - Обновлены 18 тестов → 386 проходят
+
+## Доработки A+B+C — DONE (2026-03-01)
+
+### Шаг A — Переработка Excel-вывода
+- `src/excel/models.py` — 4 модели (ExcelRow, MissingRow, RejectedRow, PendingRow) заменены на единый `UnifiedRow` (18 колонок по шаблону заказчика)
+- `src/excel/default_mapper.py` — `DEFAULT_COLUMNS` (29) заменены на `UNIFIED_COLUMNS` (18)
+- `src/excel/writer.py` — xlsxwriter заменён на openpyxl; месячная дозапись (YYYY-MM_results.xlsx); один лист "Результаты"; append-режим
+- `src/scheduler/cycle_runner.py` — все 4 сценария создают UnifiedRow (placed/missing/ratio/pending)
+- `requirements.txt` — удалён xlsxwriter (~0.4 МБ экономия в exe)
+- Тесты обновлены: test_excel.py, test_e2e.py
+
+### Шаг B — Фикс НБ-ставок + Telegram
+- B1: NB-Bet tip placement теперь для ВСЕХ решённых матчей (near + far-future)
+- B2: `src/state.py` — добавлены `_tg_notified_kush`, `record_tg_notified_kush()`, `_was_pending`, `was_previously_pending()`
+- B3: `src/telegram/notifier.py` — `notify_placed(was_pending=True)` → строка "ранее ожидала"
+- B4: `src/scheduler/cycle_runner.py` — TG дедупликация через `state.record_tg_notified_kush()`, передача `was_pending`
+- Тесты: test_state.py (4 новых), test_telegram.py (2 новых)
+
+### Шаг C — Стабильность запуска
+- C1: `src/main.py` — ошибка config.json теперь показывает `messagebox.showerror()` вместо молчаливого падения
+- C2: `src/decision/league_loader.py` — файлы `YYYY-MM_*.xlsx` исключены из auto-discovery лиг
+- C3: `src/main.py` — leagues.xlsx перечитывается каждый цикл (hot-reload), свежий ExcelWriter каждый цикл
+
+### Итого
+- 416 тестов проходят
+- 13 файлов изменено

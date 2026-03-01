@@ -187,6 +187,41 @@ class TestNotifyPlaced:
         assert "dry" not in sent_text.lower()
         assert "1.33" in sent_text
 
+    @patch("src.telegram.notifier.requests.post")
+    def test_was_pending_flag(self, mock_post):
+        """When was_pending=True, message should contain 'ранее ожидала'."""
+        mock_post.return_value = MagicMock(json=lambda: {"ok": True, "result": {}})
+        n = TelegramNotifier("tok", [100], rate_limit=0)
+        results = n.notify_placed(
+            match_key="k",
+            bet_type="П1",
+            kf_nb=2.00,
+            kf_kush=2.40,
+            ratio=1.20,
+            threshold=1.10,
+            dry_run=True,
+            was_pending=True,
+        )
+        sent_text = mock_post.call_args[1]["data"]["text"]
+        assert "ранее ожидала" in sent_text
+
+    @patch("src.telegram.notifier.requests.post")
+    def test_no_was_pending_by_default(self, mock_post):
+        """By default, message should NOT contain 'ранее ожидала'."""
+        mock_post.return_value = MagicMock(json=lambda: {"ok": True, "result": {}})
+        n = TelegramNotifier("tok", [100], rate_limit=0)
+        results = n.notify_placed(
+            match_key="k",
+            bet_type="П1",
+            kf_nb=2.00,
+            kf_kush=2.40,
+            ratio=1.20,
+            threshold=1.10,
+            dry_run=True,
+        )
+        sent_text = mock_post.call_args[1]["data"]["text"]
+        assert "ранее ожидала" not in sent_text
+
 
 # ── notify_missing ───────────────────────────────────────────────────
 

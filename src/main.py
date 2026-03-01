@@ -37,11 +37,21 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
 
-    # Load config
+    # Load config — show messagebox on error if possible (C1 fix)
     try:
         config = load_config(args.config)
-    except ConfigValidationError as e:
-        print(f"ERROR: {e}", file=sys.stderr)
+    except (ConfigValidationError, Exception) as e:
+        error_msg = f"Ошибка конфигурации\n{args.config}: {e}"
+        print(f"ERROR: {error_msg}", file=sys.stderr)
+        try:
+            import tkinter as _tk
+            _root = _tk.Tk()
+            _root.withdraw()
+            from tkinter import messagebox as _mb
+            _mb.showerror("Ошибка конфигурации", error_msg)
+            _root.destroy()
+        except Exception:
+            pass  # No GUI available
         sys.exit(1)
 
     # Override dry_run from CLI
@@ -134,8 +144,6 @@ def main() -> None:
             logger.warning("No leagues xlsx found — running with empty league settings")
             leagues_path = ""
 
-    league_settings = load_league_settings(leagues_path) if leagues_path else []
-    league_filter = LeagueFilter(settings=league_settings)
     excel_writer = ExcelWriter(output_dir=config.files.output_dir)
     telegram = TelegramNotifier(
         token=config.telegram.token,
@@ -144,12 +152,27 @@ def main() -> None:
     )
 
     def do_cycle() -> CycleStats:
+        # Hot-reload leagues each cycle (C3 fix) — changes take effect without restart
+        nonlocal leagues_path
+        if not leagues_path or not os.path.isfile(leagues_path):
+            app_dir = (
+                os.path.dirname(sys.executable)
+                if getattr(sys, "frozen", False)
+                else os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            )
+            discovered = find_leagues_xlsx(app_dir)
+            if discovered:
+                leagues_path = discovered
+        current_settings = load_league_settings(leagues_path) if leagues_path else []
+        current_filter = LeagueFilter(settings=current_settings)
+        # Fresh Excel writer each cycle (rows written to monthly file via append)
+        cycle_excel = ExcelWriter(output_dir=config.files.output_dir)
         return run_cycle(
             config=config,
             state=state,
             nb_client=nb_client,
-            league_filter=league_filter,
-            excel_writer=excel_writer,
+            league_filter=current_filter,
+            excel_writer=cycle_excel,
             telegram=telegram,
             proxies=proxies,
         )
