@@ -28,7 +28,7 @@ a = Analysis(
         'lxml.sax', 'lxml.builder',
         'xlsxwriter',
         'openpyxl.chart', 'openpyxl.chartsheet', 'openpyxl.drawing',
-        'openpyxl.pivot', 'openpyxl.comments', 'openpyxl.formula',
+        'openpyxl.pivot', 'openpyxl.comments',
     ],
     noarchive=False,
     optimize=0,
