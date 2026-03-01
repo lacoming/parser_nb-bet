@@ -26,6 +26,9 @@ a = Analysis(
         'setuptools', 'pkg_resources', 'wheel', 'test', 'xmlrpc', 'curses',
         'lxml.objectify', 'lxml.html.diff', 'lxml.html.clean', 'lxml.isoschematron',
         'lxml.sax', 'lxml.builder',
+        'xlsxwriter',
+        'openpyxl.chart', 'openpyxl.chartsheet', 'openpyxl.drawing',
+        'openpyxl.pivot', 'openpyxl.comments', 'openpyxl.formula',
     ],
     noarchive=False,
     optimize=0,
@@ -38,6 +41,8 @@ _tcl_enc_keep = {
     'cp866.enc', 'iso8859-1.enc', 'iso8859-15.enc',
     'iso8859-2.enc', 'iso8859-5.enc', 'koi8-r.enc', 'utf-8.enc',
 }
+
+_tzdata_keep = ('Europe/', 'Etc/', 'UTC', 'tzdata/__init__', 'METADATA')
 
 def _should_strip_data(name):
     n = name.replace('\\', '/')
@@ -63,6 +68,10 @@ def _should_strip_data(name):
     _tk_strip = ('images/', 'mkpsenc.tcl', 'console.tcl', 'msgs/')
     if '_tk_data' in n and any(s in n for s in _tk_strip):
         return True
+    # Strip non-European tzdata zones (we only need Europe/Moscow)
+    if 'tzdata/zoneinfo/' in n:
+        if not any(k in n for k in _tzdata_keep):
+            return True
     return False
 
 a.datas = [(n, s, t) for n, s, t in a.datas if not _should_strip_data(n)]
