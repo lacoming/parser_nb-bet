@@ -29,7 +29,8 @@ def parse_args() -> argparse.Namespace:
     mode.add_argument("--once", action="store_true", help="Run one cycle and exit")
     mode.add_argument("--daemon", action="store_true", help="Run on schedule (daemon mode)")
     parser.add_argument("--dry-run", action="store_true", help="No real bets placed")
-    parser.add_argument("--test-telegram", action="store_true", help="Send test Telegram message and exit")
+    parser.add_argument("--test-telegram", action="store_true", help="Send test VK message and exit")
+    parser.add_argument("--test-vk", action="store_true", help="Send test VK message and exit")
     parser.add_argument("--config", default="config.json", help="Path to config file")
     return parser.parse_args()
 
@@ -59,7 +60,7 @@ def main() -> None:
         config.kush.dry_run = True
 
     # Determine mode
-    is_gui = not args.once and not args.daemon and not args.test_telegram
+    is_gui = not args.once and not args.daemon and not args.test_telegram and not args.test_vk
 
     # For GUI mode, create window early so its log handler captures all messages
     window = None
@@ -87,24 +88,24 @@ def main() -> None:
     # Init state
     state = AppState()
 
-    # Test telegram mode
-    if args.test_telegram:
-        from src.telegram.notifier import TelegramNotifier
+    # Test VK mode (--test-telegram kept for backwards compat)
+    if args.test_telegram or args.test_vk:
+        from src.vk.notifier import VkNotifier
 
-        tg = TelegramNotifier(
-            token=config.telegram.token,
-            chat_ids=config.telegram.chat_ids,
-            rate_limit=config.telegram.rate_limit_seconds,
+        vk = VkNotifier(
+            token=config.vk.token,
+            peer_id=config.vk.peer_id,
+            rate_limit=config.vk.rate_limit_seconds,
         )
-        if not tg.enabled:
-            logger.error("Telegram not configured (token or chat_ids missing)")
+        if not vk.enabled:
+            logger.error("VK not configured (token or peer_id missing)")
             sys.exit(1)
-        results = tg.send_test()
+        results = vk.send_test()
         for r in results:
             if r.ok:
-                logger.info("Test message sent to chat %s", r.chat_id)
+                logger.info("Test message sent to peer %s", r.peer_id)
             else:
-                logger.error("Failed to send to chat %s: %s", r.chat_id, r.error)
+                logger.error("Failed to send to peer %s: %s", r.peer_id, r.error)
         return
 
     # Build shared components for cycle
@@ -115,7 +116,7 @@ def main() -> None:
     from src.nb.client import NbClient
     from src.scheduler.cycle_runner import CycleStats, run_cycle
     from src.scheduler.msk_scheduler import MskScheduler
-    from src.telegram.notifier import TelegramNotifier
+    from src.vk.notifier import VkNotifier
 
     proxies = load_proxies(config.proxies.file) if config.proxies.enabled else []
     nb_client = NbClient(config=config.nb, proxy_list=proxies)
@@ -145,10 +146,10 @@ def main() -> None:
             leagues_path = ""
 
     excel_writer = ExcelWriter(output_dir=config.files.output_dir)
-    telegram = TelegramNotifier(
-        token=config.telegram.token,
-        chat_ids=config.telegram.chat_ids,
-        rate_limit=config.telegram.rate_limit_seconds,
+    telegram = VkNotifier(
+        token=config.vk.token,
+        peer_id=config.vk.peer_id,
+        rate_limit=config.vk.rate_limit_seconds,
     )
 
     def do_cycle() -> CycleStats:

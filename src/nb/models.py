@@ -22,6 +22,8 @@ class Match:
     odds_1_end: float | None = None
     odds_x_end: float | None = None
     odds_2_end: float | None = None
+    score_home: int | None = None  # NB predicted exact score (field '46')
+    score_away: int | None = None  # NB predicted exact score (field '47')
 
     @property
     def odds_1x_start(self) -> float | None:
@@ -45,6 +47,13 @@ class Match:
         if self.odds_1_end is not None and self.odds_x_end is not None:
             denom = (1 / self.odds_1_end) + (1 / self.odds_x_end)
             return 1 / denom if denom > 0 else None
+        return None
+
+    @property
+    def score_diff(self) -> int | None:
+        """Exact score difference (home - away). None if scores unavailable."""
+        if self.score_home is not None and self.score_away is not None:
+            return self.score_home - self.score_away
         return None
 
     @property

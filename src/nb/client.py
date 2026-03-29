@@ -210,6 +210,10 @@ def _parse_match(raw: dict, league: str, sport: str) -> Optional[Match]:
     odds_x_end = _safe_float(end_odds.get("3"))
     odds_2_end = _safe_float(end_odds.get("2"))
 
+    # Predicted exact score (fields '46' and '47')
+    score_home = _safe_int(raw.get("46"))
+    score_away = _safe_int(raw.get("47"))
+
     # Skip matches without end odds (not useful for decision)
     if odds_1_end is None or odds_2_end is None:
         return None
@@ -230,6 +234,8 @@ def _parse_match(raw: dict, league: str, sport: str) -> Optional[Match]:
         odds_1_end=odds_1_end,
         odds_x_end=odds_x_end,
         odds_2_end=odds_2_end,
+        score_home=score_home,
+        score_away=score_away,
     )
 
 
@@ -239,5 +245,15 @@ def _safe_float(val) -> Optional[float]:
         return None
     try:
         return float(val)
+    except (ValueError, TypeError):
+        return None
+
+
+def _safe_int(val) -> Optional[int]:
+    """Safely convert value to int."""
+    if val is None or val == "":
+        return None
+    try:
+        return int(val)
     except (ValueError, TypeError):
         return None

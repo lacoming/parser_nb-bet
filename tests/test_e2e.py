@@ -20,7 +20,7 @@ from src.config.schema import (
     NbConfig,
     ProxiesConfig,
     ScheduleConfig,
-    TelegramConfig,
+    VkConfig,
     ThresholdsConfig,
 )
 from src.decision.league_filter import LeagueFilter
@@ -30,13 +30,13 @@ from src.kush.models import KushEvent
 from src.nb.models import Match
 from src.scheduler.cycle_runner import run_cycle
 from src.state import AppState
-from src.telegram.notifier import TelegramNotifier
+from src.vk.notifier import VkNotifier
 
 
 def _make_config(tmpdir: str, dry_run: bool = True) -> AppConfig:
     return AppConfig(
         schedule=ScheduleConfig(),
-        telegram=TelegramConfig(token="", chat_ids=[]),
+        vk=VkConfig(token="", peer_id=0),
         proxies=ProxiesConfig(),
         thresholds=ThresholdsConfig(roi=0.05, default_ratio=1.10, big_league_ratio=1.05),
         files=FilesConfig(output_dir=tmpdir, logs_dir=tmpdir),
@@ -103,7 +103,7 @@ class TestE2EDryRun:
         league_settings = [LeagueSetting(bet_type="1", leagues=["Premier League"])]
         league_filter = LeagueFilter(settings=league_settings)
         excel_writer = ExcelWriter(output_dir=str(tmp_path))
-        telegram = MagicMock(spec=TelegramNotifier)
+        telegram = MagicMock(spec=VkNotifier)
 
         with patch("src.scheduler.cycle_runner.KushSession") as MockSession, \
              patch("src.scheduler.cycle_runner.KushClient") as MockClient, \
@@ -176,7 +176,7 @@ class TestE2EDryRun:
         league_settings = [LeagueSetting(bet_type="1", leagues=["Premier League"])]
         league_filter = LeagueFilter(settings=league_settings)
         excel_writer = ExcelWriter(output_dir=str(tmp_path))
-        telegram = MagicMock(spec=TelegramNotifier)
+        telegram = MagicMock(spec=VkNotifier)
 
         stats = run_cycle(
             config=config,
@@ -203,7 +203,7 @@ class TestE2EDryRun:
         league_settings = [LeagueSetting(bet_type="1", leagues=["Premier League"])]
         league_filter = LeagueFilter(settings=league_settings)
         excel_writer = ExcelWriter(output_dir=str(tmp_path))
-        telegram = MagicMock(spec=TelegramNotifier)
+        telegram = MagicMock(spec=VkNotifier)
 
         with patch("src.scheduler.cycle_runner.KushSession"), \
              patch("src.scheduler.cycle_runner.KushClient") as MockClient, \
@@ -241,7 +241,7 @@ class TestE2EDryRun:
         league_settings = [LeagueSetting(bet_type="1", leagues=["La Liga"])]
         league_filter = LeagueFilter(settings=league_settings)
         excel_writer = ExcelWriter(output_dir=str(tmp_path))
-        telegram = MagicMock(spec=TelegramNotifier)
+        telegram = MagicMock(spec=VkNotifier)
 
         stats = run_cycle(
             config=config,
@@ -267,7 +267,7 @@ class TestE2EDryRun:
         league_settings = []
         league_filter = LeagueFilter(settings=league_settings)
         excel_writer = ExcelWriter(output_dir=str(tmp_path))
-        telegram = MagicMock(spec=TelegramNotifier)
+        telegram = MagicMock(spec=VkNotifier)
 
         stats = run_cycle(
             config=config,
@@ -293,7 +293,7 @@ class TestE2EDryRun:
         league_settings = [LeagueSetting(bet_type="1", leagues=["Premier League"])]
         league_filter = LeagueFilter(settings=league_settings)
         excel_writer = ExcelWriter(output_dir=str(tmp_path))
-        telegram = MagicMock(spec=TelegramNotifier)
+        telegram = MagicMock(spec=VkNotifier)
 
         with patch("src.scheduler.cycle_runner.KushSession") as MockSession:
             MockSession.side_effect = ConnectionError("Kush down")
@@ -322,7 +322,7 @@ class TestE2EDryRun:
         league_settings = [LeagueSetting(bet_type="1", leagues=["Premier League"])]
         league_filter = LeagueFilter(settings=league_settings)
         excel_writer = ExcelWriter(output_dir=str(tmp_path))
-        telegram = MagicMock(spec=TelegramNotifier)
+        telegram = MagicMock(spec=VkNotifier)
 
         with patch("src.scheduler.cycle_runner.KushSession"), \
              patch("src.scheduler.cycle_runner.KushClient") as MockClient, \
@@ -353,7 +353,7 @@ class TestE2EDryRun:
         league_settings = [LeagueSetting(bet_type="1", leagues=["Premier League"])]
         league_filter = LeagueFilter(settings=league_settings)
         excel_writer = ExcelWriter(output_dir=str(tmp_path))
-        telegram = MagicMock(spec=TelegramNotifier)
+        telegram = MagicMock(spec=VkNotifier)
 
         kush_event = _make_kush_event()
 
@@ -416,7 +416,7 @@ class TestE2EDryRun:
         )]
         league_filter = LeagueFilter(settings=league_settings)
         excel_writer = ExcelWriter(output_dir=str(tmp_path))
-        telegram = MagicMock(spec=TelegramNotifier)
+        telegram = MagicMock(spec=VkNotifier)
 
         stats = run_cycle(
             config=config, state=state, nb_client=nb_client,
@@ -435,7 +435,7 @@ class TestFarFuturePending:
         """Matches beyond Kush's 3-day window produce unified rows, not missing."""
         config = _make_config(str(tmp_path))
         state = AppState()
-        far_dt = datetime(2026, 3, 10, 15, 0, tzinfo=timezone.utc)
+        far_dt = datetime(2026, 6, 10, 15, 0, tzinfo=timezone.utc)
         far_match = Match(
             match_key=Match.make_key("La Liga", "Barcelona", "Sevilla", far_dt),
             league="La Liga",
@@ -458,7 +458,7 @@ class TestFarFuturePending:
         league_settings = [LeagueSetting(bet_type="1", leagues=["La Liga"])]
         league_filter = LeagueFilter(settings=league_settings)
         excel_writer = ExcelWriter(output_dir=str(tmp_path))
-        telegram = MagicMock(spec=TelegramNotifier)
+        telegram = MagicMock(spec=VkNotifier)
 
         stats = run_cycle(
             config=config,
@@ -482,7 +482,7 @@ class TestFarFuturePending:
         """Second cycle with same far-future match should not re-send TG."""
         config = _make_config(str(tmp_path))
         state = AppState()
-        far_dt = datetime(2026, 3, 10, 15, 0, tzinfo=timezone.utc)
+        far_dt = datetime(2026, 6, 10, 15, 0, tzinfo=timezone.utc)
         far_match = Match(
             match_key=Match.make_key("La Liga", "Barcelona", "Sevilla", far_dt),
             league="La Liga",
@@ -500,7 +500,7 @@ class TestFarFuturePending:
 
         league_settings = [LeagueSetting(bet_type="1", leagues=["La Liga"])]
         league_filter = LeagueFilter(settings=league_settings)
-        telegram = MagicMock(spec=TelegramNotifier)
+        telegram = MagicMock(spec=VkNotifier)
 
         # First cycle
         excel_writer = ExcelWriter(output_dir=str(tmp_path))
@@ -529,7 +529,7 @@ class TestFarFuturePending:
         league_settings = [LeagueSetting(bet_type="1", leagues=["Premier League"])]
         league_filter = LeagueFilter(settings=league_settings)
         excel_writer = ExcelWriter(output_dir=str(tmp_path))
-        telegram = MagicMock(spec=TelegramNotifier)
+        telegram = MagicMock(spec=VkNotifier)
 
         with patch("src.scheduler.cycle_runner.KushSession"), \
              patch("src.scheduler.cycle_runner.KushClient") as MockClient, \

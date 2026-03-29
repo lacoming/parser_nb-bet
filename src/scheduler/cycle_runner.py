@@ -22,7 +22,7 @@ from src.nb.client import NbClient
 from src.nb.models import Match
 from src.nb.session import NbSession
 from src.state import AppState
-from src.telegram.notifier import TelegramNotifier
+from src.vk.notifier import VkNotifier
 
 log = logging.getLogger("parser_nb_bet.scheduler.cycle_runner")
 
@@ -31,7 +31,6 @@ _DECISION_TO_KUSH: dict[str, str] = {
     "1": "П1",
     "2": "П2",
     "X": "X",
-    "1X": "1X",
 }
 
 
@@ -71,13 +70,53 @@ def _fmt(val: Optional[float], fmt: str = ":.2f") -> str:
     return f"{val:.2f}"
 
 
+def _score_filter_passes(match: Match, bet_type: str) -> bool:
+    """Check exact score + odds conditions for поб1/поб2/X bets.
+
+    Rules (from customer spec):
+    - поб1 (bet_type '1'): kf1 < kf2, kf1 >= 1.5, kf2 >= 1.5, score diff > 0
+    - поб2 (bet_type '2'): kf2 < kf1, kf1 >= 1.5, kf2 >= 1.5, score diff < 0
+    - X:  kf1 > kf2, kf1 <= 8, kf1 >= 1.5, kf2 >= 1.5, score diff == 0
+    - Other bet types: always pass.
+    """
+    bt = bet_type.upper()
+    if bt not in ("1", "П1", "2", "П2", "X", "НИЧЬЯ"):
+        return True
+
+    diff = match.score_diff
+    kf1 = match.odds_1_start
+    kf2 = match.odds_2_start
+
+    if bt in ("1", "П1", "2", "П2"):
+        # поб1/поб2: both kf1 >= 1.5 and kf2 >= 1.5
+        if kf1 is not None and kf2 is not None:
+            if kf1 < 1.5 or kf2 < 1.5:
+                return False
+        if diff is None:
+            return True
+        if bt in ("1", "П1"):
+            return diff > 0
+        return diff < 0  # поб2
+
+    if bt in ("X", "НИЧЬЯ"):
+        # X: kf1 > kf2, kf1 <= 8, kf1 >= 1.5, kf2 >= 1.5, score diff == 0
+        if kf1 is not None and kf2 is not None:
+            if not (kf1 > kf2 and kf1 <= 8 and kf1 >= 1.5 and kf2 >= 1.5):
+                return False
+        if diff is None:
+            return True
+        return diff == 0
+
+    return True
+
+
 def run_cycle(
     config: AppConfig,
     state: AppState,
     nb_client: NbClient,
     league_filter: LeagueFilter,
     excel_writer: ExcelWriter,
-    telegram: TelegramNotifier,
+    telegram: VkNotifier,
     proxies: Optional[list[str]] = None,
 ) -> CycleStats:
     """Execute one full cycle.
@@ -131,6 +170,13 @@ def run_cycle(
         if not setting.check(far_match.odds_1_start, far_match.odds_2_start):
             continue
         target_bet_type = setting.bet_type
+        if not _score_filter_passes(far_match, target_bet_type):
+            log.debug(
+                "Score filter rejected %s bet=%s score=%s-%s",
+                far_match.match_key, target_bet_type,
+                far_match.score_home, far_match.score_away,
+            )
+            continue
         league_roi = setting.roi
         kf_nb = _get_kf_nb(far_match, target_bet_type)
         threshold = _get_default_threshold(config, far_match.league)
@@ -198,6 +244,13 @@ def run_cycle(
                 match.match_key, target_bet_type, match.odds_1_start, match.odds_2_start,
             )
             continue
+        if not _score_filter_passes(match, target_bet_type):
+            log.debug(
+                "Score filter rejected %s bet=%s score=%s-%s",
+                match.match_key, target_bet_type,
+                match.score_home, match.score_away,
+            )
+            continue
         decision = BetDecision(
             bet_type=target_bet_type,
             passes=True,
@@ -223,6 +276,7 @@ def run_cycle(
             log.exception("NB-Bet login failed")
             stats.errors += 1
 
+    nb_funds_exhausted = False
     if nb_placer:
         # Near-window decided matches
         for match, decision, _lr in passing:
@@ -231,6 +285,18 @@ def run_cycle(
             nb_result = nb_placer.place_tip(
                 match, decision.bet_type, config.nb.dry_run,
             )
+            if nb_result.insufficient_funds:
+                log.warning("NB insufficient funds — stopping NB bets this cycle")
+                telegram.notify_insufficient_funds(
+                    platform="NB-Bet",
+                    league=match.league,
+                    team_home=match.team_home,
+                    team_away=match.team_away,
+                    bet_type=decision.bet_type,
+                    error_detail=nb_result.error,
+                )
+                nb_funds_exhausted = True
+                break
             if nb_result.success:
                 stats.nb_placed += 1
                 state.record_nb_placed(match.match_key)
@@ -239,18 +305,30 @@ def run_cycle(
                 log.warning("NB tip FAIL: %s -- %s", match.match_key, nb_result.error)
 
         # Far-future decided matches [B1 fix]
-        for far_match, bet_type, _lr in far_decided:
-            if state.is_nb_placed(far_match.match_key):
-                continue
-            nb_result = nb_placer.place_tip(
-                far_match, bet_type, config.nb.dry_run,
-            )
-            if nb_result.success:
-                stats.nb_placed += 1
-                state.record_nb_placed(far_match.match_key)
-                log.info("NB tip OK (far): %s %s", far_match.match_key, bet_type)
-            else:
-                log.warning("NB tip FAIL (far): %s -- %s", far_match.match_key, nb_result.error)
+        if not nb_funds_exhausted:
+            for far_match, bet_type, _lr in far_decided:
+                if state.is_nb_placed(far_match.match_key):
+                    continue
+                nb_result = nb_placer.place_tip(
+                    far_match, bet_type, config.nb.dry_run,
+                )
+                if nb_result.insufficient_funds:
+                    log.warning("NB insufficient funds (far) — stopping NB bets this cycle")
+                    telegram.notify_insufficient_funds(
+                        platform="NB-Bet",
+                        league=far_match.league,
+                        team_home=far_match.team_home,
+                        team_away=far_match.team_away,
+                        bet_type=bet_type,
+                        error_detail=nb_result.error,
+                    )
+                    break
+                if nb_result.success:
+                    stats.nb_placed += 1
+                    state.record_nb_placed(far_match.match_key)
+                    log.info("NB tip OK (far): %s %s", far_match.match_key, bet_type)
+                else:
+                    log.warning("NB tip FAIL (far): %s -- %s", far_match.match_key, nb_result.error)
 
     # Update nb_placed field in far-future rows that were just written
     # (rows are already in buffer — update in-place)
@@ -455,6 +533,39 @@ def run_cycle(
                         link=match.nb_url,
                         was_pending=was_pending,
                     )
+            elif bet_result.insufficient_funds:
+                # --- Insufficient funds on Kush ---
+                log.warning("Kush insufficient funds — stopping Kush bets this cycle")
+                excel_writer.add_row(UnifiedRow(
+                    date=match.start_time_utc.strftime("%d.%m.%Y"),
+                    time=match.start_time_utc.strftime("%H:%M"),
+                    league=match.league,
+                    team_home=match.team_home,
+                    team_away=match.team_away,
+                    bet_type=bet_result.bet_type,
+                    kf1_start=_fmt(match.odds_1_start),
+                    kfx_start=_fmt(match.odds_x_start),
+                    kf2_start=_fmt(match.odds_2_start),
+                    kf_nb=_fmt(kf_nb),
+                    min_kf_kush=_fmt(min_kf),
+                    nb_placed=is_nb,
+                    kush_placed="-",
+                    kush_reason="нет средств",
+                    kf_kush=_fmt(bet_result.kf_kush),
+                    kush_date="",
+                    kush_time="",
+                    link=match.nb_url,
+                ))
+                telegram.notify_insufficient_funds(
+                    platform="Kush",
+                    league=match.league,
+                    team_home=match.team_home,
+                    team_away=match.team_away,
+                    bet_type=bet_result.bet_type,
+                    error_detail=bet_result.error,
+                )
+                # Don't mark as processed — retry next cycle
+                break
             elif not bet_result.ratio_passes and bet_result.kf_kush > 0:
                 # --- Ratio rejected ---
                 stats.rejected += 1
@@ -581,6 +692,4 @@ def _get_kf_nb(match: Match, bet_type: str) -> Optional[float]:
         return match.odds_2_start
     elif bt in ("X", "НИЧЬЯ"):
         return match.odds_x_start
-    elif bt in ("1X",):
-        return match.odds_1_start
     return match.odds_1_start  # fallback

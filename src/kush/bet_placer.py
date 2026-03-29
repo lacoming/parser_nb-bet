@@ -306,7 +306,7 @@ class BetPlacer:
 
             # Step 4b: create_coupon — POST to submit the bet
             try:
-                success, message = self._create_coupon(
+                success, message, no_funds = self._create_coupon(
                     tokens, kush_event_url,
                 )
             except Exception as exc:
@@ -318,6 +318,14 @@ class BetPlacer:
                     match, odds_entry, kf_nb, ratio, threshold,
                     placed=False, success=False,
                     error=f"create_coupon failed: {exc}",
+                )
+
+            # Insufficient funds — don't retry, bubble up immediately
+            if no_funds:
+                return self._make_result(
+                    match, odds_entry, kf_nb, ratio, threshold,
+                    placed=False, success=False,
+                    error=message, insufficient_funds=True,
                 )
 
             if success:
@@ -396,11 +404,11 @@ class BetPlacer:
 
     def _create_coupon(
         self, tokens: dict[str, str], event_url: str,
-    ) -> tuple[bool, str]:
+    ) -> tuple[bool, str, bool]:
         """POST /coupon/create-coupon to submit the bet.
 
         Returns:
-            (success, message)
+            (success, message, insufficient_funds)
         """
         base = self._session._base_url
 
@@ -429,12 +437,16 @@ class BetPlacer:
 
         if "Прогноз успешно добавлен" in text:
             log.info("Bet placed successfully")
-            return True, "Прогноз успешно добавлен"
+            return True, "Прогноз успешно добавлен", False
 
         # Try to extract error message
         error_msg = _extract_error(text)
-        log.warning("Bet placement failed: %s", error_msg)
-        return False, error_msg
+        no_funds = _is_insufficient_funds(error_msg) or _is_insufficient_funds(text)
+        if no_funds:
+            log.warning("Insufficient funds on Kush: %s", error_msg)
+        else:
+            log.warning("Bet placement failed: %s", error_msg)
+        return False, error_msg, no_funds
 
     def _make_result(
         self,
@@ -446,6 +458,7 @@ class BetPlacer:
         placed: bool,
         success: bool,
         error: str,
+        insufficient_funds: bool = False,
     ) -> BetResult:
         return BetResult(
             match_key=match.match_key,
@@ -460,10 +473,29 @@ class BetPlacer:
             dry_run=self._kush_config.dry_run,
             success=success,
             error=error,
+            insufficient_funds=insufficient_funds,
             league=match.league,
             team_home=match.team_home,
             team_away=match.team_away,
         )
+
+
+_INSUFFICIENT_FUNDS_MARKERS = [
+    "недостаточно средств",
+    "недостаточно баланс",
+    "нет средств",
+    "не хватает средств",
+    "не хватает баллов",
+    "баланс недостаточен",
+    "insufficient",
+    "not enough",
+]
+
+
+def _is_insufficient_funds(text: str) -> bool:
+    """Check if error text indicates insufficient funds on Kush."""
+    lower = text.lower()
+    return any(marker in lower for marker in _INSUFFICIENT_FUNDS_MARKERS)
 
 
 def _extract_error(html: str) -> str:

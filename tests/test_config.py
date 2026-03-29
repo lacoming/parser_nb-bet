@@ -58,6 +58,18 @@ class TestConfigParsing:
         assert cfg.kush.min_confidence == 0.90
         assert cfg.thresholds.roi == 0.03
 
+    def test_vk_config(self, tmp_path):
+        """VK section parsed correctly."""
+        data = {
+            "vk": {"token": "vk_test_token", "peer_id": 2000000001, "rate_limit_seconds": 2.0},
+        }
+        p = tmp_path / "config.json"
+        p.write_text(json.dumps(data))
+        cfg = load_config(str(p))
+        assert cfg.vk.token == "vk_test_token"
+        assert cfg.vk.peer_id == 2000000001
+        assert cfg.vk.rate_limit_seconds == 2.0
+
     def test_unknown_keys_ignored(self, tmp_path):
         """Unknown keys in JSON don't cause errors."""
         data = {"schedule": {"interval_hours": 3, "unknown_key": "value"}}

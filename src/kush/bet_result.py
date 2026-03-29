@@ -21,6 +21,8 @@ class BetResult:
     dry_run: bool
     success: bool  # True if placement succeeded (or dry-run passed)
     error: str = ""
+    insufficient_funds: bool = False  # Kush rejected: not enough balance
+    insufficient_funds: bool = False  # True if Kush rejected due to lack of funds
     timestamp: datetime = field(default_factory=lambda: datetime.now())
     league: str = ""
     team_home: str = ""

@@ -21,6 +21,13 @@ class TelegramConfig:
 
 
 @dataclass
+class VkConfig:
+    token: str = ""
+    peer_id: int = 0
+    rate_limit_seconds: float = 1.0
+
+
+@dataclass
 class ProxiesConfig:
     enabled: bool = False
     file: str = "proxies.txt"
@@ -83,6 +90,7 @@ class LoggingConfig:
 class AppConfig:
     schedule: ScheduleConfig = field(default_factory=ScheduleConfig)
     telegram: TelegramConfig = field(default_factory=TelegramConfig)
+    vk: VkConfig = field(default_factory=VkConfig)
     proxies: ProxiesConfig = field(default_factory=ProxiesConfig)
     thresholds: ThresholdsConfig = field(default_factory=ThresholdsConfig)
     files: FilesConfig = field(default_factory=FilesConfig)

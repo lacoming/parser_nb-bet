@@ -42,7 +42,7 @@ class LeagueSetting:
       C: условие (condition text) — on first row of group
     """
 
-    bet_type: str  # "1" | "1X" | "2" | "X"
+    bet_type: str  # "1" (Поб1) | "2" (Поб2) | "X" (Ничья)
     leagues: list[str] = field(default_factory=list)
     condition_raw: str = ""  # Original condition text from Excel
 
@@ -78,6 +78,6 @@ class LeagueSetting:
 class BetDecision:
     """Result of decision engine evaluation."""
 
-    bet_type: str  # "1X" | "1" | "2" | "X" | "skip"
+    bet_type: str  # "1" (Поб1) | "2" (Поб2) | "X" (Ничья) | "skip"
     passes: bool
     reasons: list[str] = field(default_factory=list)

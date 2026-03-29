@@ -37,6 +37,7 @@ class NbBetResult:
     success: bool = False
     dry_run: bool = False
     error: str = ""
+    insufficient_funds: bool = False  # NB rejected: not enough balance
     tip_id: Optional[int] = None
     timestamp: datetime = field(default_factory=datetime.now)
 
@@ -45,6 +46,23 @@ class NbBetResult:
         mode = "DRY-RUN" if self.dry_run else "REAL"
         status = "OK" if self.success else f"FAIL: {self.error}"
         return f"[NB {mode}] {self.bet_type} odd_type={self.odd_type} | {status}"
+
+
+_INSUFFICIENT_FUNDS_MARKERS = [
+    "недостаточно",
+    "не хватает",
+    "нет средств",
+    "insufficient",
+    "not enough",
+    "balance",
+    "баланс",
+]
+
+
+def _is_insufficient_funds_nb(text: str) -> bool:
+    """Check if NB API error indicates insufficient funds."""
+    lower = text.lower()
+    return any(marker in lower for marker in _INSUFFICIENT_FUNDS_MARKERS)
 
 
 class NbBetPlacer:
@@ -135,6 +153,23 @@ class NbBetPlacer:
                 error="Response not JSON",
             )
 
+        # Check for error/insufficient funds in response body
+        error_msg = _extract_nb_error(body)
+        if error_msg:
+            no_funds = _is_insufficient_funds_nb(error_msg)
+            if no_funds:
+                log.warning("Insufficient funds on NB: %s", error_msg)
+            else:
+                log.warning("NB tip error: %s", error_msg)
+            return NbBetResult(
+                match_key=match.match_key,
+                bet_type=bet_type,
+                odd_type=odd_type,
+                stake=stake,
+                error=error_msg,
+                insufficient_funds=no_funds,
+            )
+
         tip_id = _extract_tip_id(body)
 
         if tip_id is not None:
@@ -166,6 +201,35 @@ class NbBetPlacer:
             success=True,
             dry_run=False,
         )
+
+
+def _extract_nb_error(body: dict) -> Optional[str]:
+    """Extract error message from NB-Bet API response, if any.
+
+    Known patterns:
+      {"error": "..."} or {"data": {"error": "..."}} or {"message": "..."}
+      {"data": {"status": "error", "message": "..."}}
+    Returns None if no error detected.
+    """
+    if not isinstance(body, dict):
+        return None
+    # Top-level error
+    for key in ("error", "message", "error_message"):
+        val = body.get(key)
+        if isinstance(val, str) and val:
+            return val
+    # Nested in data
+    data = body.get("data")
+    if isinstance(data, dict):
+        status = data.get("status", "")
+        if isinstance(status, str) and status.lower() in ("error", "fail", "failed"):
+            msg = data.get("message") or data.get("error") or status
+            return str(msg)
+        for key in ("error", "message", "error_message"):
+            val = data.get(key)
+            if isinstance(val, str) and val:
+                return val
+    return None
 
 
 def _extract_tip_id(body: dict) -> Optional[int]:

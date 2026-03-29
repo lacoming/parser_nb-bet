@@ -28,116 +28,231 @@ def _make_match(**kwargs) -> Match:
 # ─── DecisionEngine tests ──────────────────────────────────────────────
 
 
-class TestDecisionEngineKf1GtKf2:
-    """kf1 > kf2 branch (home is underdog)."""
+class TestDecisionEnginePob1:
+    """Поб1 branch: kf1 < kf2, kf1 >= 1.5, kf2 >= 1.5, score_diff > 0."""
 
-    def test_all_pass(self):
+    def test_passes_all_conditions(self):
         engine = DecisionEngine()
-        m = _make_match(odds_1_start=3.50, odds_x_start=3.20, odds_2_start=2.10)
+        m = _make_match(
+            odds_1_start=2.00, odds_2_start=3.00,
+            score_home=2, score_away=1,
+        )
         decisions = engine.decide(m)
-        types = {d.bet_type for d in decisions if d.passes}
-        assert "1X" in types
-        assert "1" in types
+        d_1 = next(d for d in decisions if d.bet_type == "1")
+        assert d_1.passes
+
+    def test_fails_kf1_too_low(self):
+        engine = DecisionEngine()
+        m = _make_match(
+            odds_1_start=1.40, odds_2_start=3.00,
+            score_home=2, score_away=1,
+        )
+        decisions = engine.decide(m)
+        d_1 = next(d for d in decisions if d.bet_type == "1")
+        assert not d_1.passes
+
+    def test_fails_kf2_too_low(self):
+        engine = DecisionEngine()
+        m = _make_match(
+            odds_1_start=1.50, odds_2_start=1.40,
+        )
+        # kf1 > kf2 here, so this goes to kf1>kf2 branch, not Поб1
+        # Let's use kf1 < kf2 but kf2 < 1.5 — impossible since kf2 > kf1 >= 1.5
+        # Instead test kf2 < 1.5 directly
+        m = _make_match(
+            odds_1_start=1.20, odds_2_start=1.40,
+            score_home=2, score_away=1,
+        )
+        decisions = engine.decide(m)
+        d_1 = next(d for d in decisions if d.bet_type == "1")
+        assert not d_1.passes
+
+    def test_fails_score_diff_zero(self):
+        engine = DecisionEngine()
+        m = _make_match(
+            odds_1_start=2.00, odds_2_start=3.00,
+            score_home=1, score_away=1,
+        )
+        decisions = engine.decide(m)
+        d_1 = next(d for d in decisions if d.bet_type == "1")
+        assert not d_1.passes
+
+    def test_fails_score_diff_negative(self):
+        engine = DecisionEngine()
+        m = _make_match(
+            odds_1_start=2.00, odds_2_start=3.00,
+            score_home=0, score_away=2,
+        )
+        decisions = engine.decide(m)
+        d_1 = next(d for d in decisions if d.bet_type == "1")
+        assert not d_1.passes
+
+    def test_passes_score_none(self):
+        """When score is unknown, score condition is skipped."""
+        engine = DecisionEngine()
+        m = _make_match(
+            odds_1_start=2.00, odds_2_start=3.00,
+            score_home=None, score_away=None,
+        )
+        decisions = engine.decide(m)
+        d_1 = next(d for d in decisions if d.bet_type == "1")
+        assert d_1.passes
+
+    def test_boundary_kf1_equals_1_5(self):
+        engine = DecisionEngine()
+        m = _make_match(
+            odds_1_start=1.50, odds_2_start=3.00,
+            score_home=1, score_away=0,
+        )
+        decisions = engine.decide(m)
+        d_1 = next(d for d in decisions if d.bet_type == "1")
+        assert d_1.passes
+
+
+class TestDecisionEnginePob2:
+    """Поб2 branch: kf1 > kf2 (kf2 < kf1), kf1 >= 1.5, kf2 >= 1.5, score_diff < 0."""
+
+    def test_passes_all_conditions(self):
+        engine = DecisionEngine()
+        m = _make_match(
+            odds_1_start=3.00, odds_2_start=2.00,
+            score_home=0, score_away=2,
+        )
+        decisions = engine.decide(m)
+        d_2 = next(d for d in decisions if d.bet_type == "2")
+        assert d_2.passes
+
+    def test_fails_kf2_too_low(self):
+        engine = DecisionEngine()
+        m = _make_match(
+            odds_1_start=3.00, odds_2_start=1.40,
+            score_home=0, score_away=1,
+        )
+        decisions = engine.decide(m)
+        d_2 = next(d for d in decisions if d.bet_type == "2")
+        assert not d_2.passes
+
+    def test_fails_kf1_too_low(self):
+        engine = DecisionEngine()
+        m = _make_match(
+            odds_1_start=1.40, odds_2_start=1.30,
+            score_home=0, score_away=1,
+        )
+        decisions = engine.decide(m)
+        d_2 = next(d for d in decisions if d.bet_type == "2")
+        assert not d_2.passes
+
+    def test_fails_score_diff_positive(self):
+        engine = DecisionEngine()
+        m = _make_match(
+            odds_1_start=3.00, odds_2_start=2.00,
+            score_home=2, score_away=1,
+        )
+        decisions = engine.decide(m)
+        d_2 = next(d for d in decisions if d.bet_type == "2")
+        assert not d_2.passes
+
+    def test_fails_score_diff_zero(self):
+        engine = DecisionEngine()
+        m = _make_match(
+            odds_1_start=3.00, odds_2_start=2.00,
+            score_home=1, score_away=1,
+        )
+        decisions = engine.decide(m)
+        d_2 = next(d for d in decisions if d.bet_type == "2")
+        assert not d_2.passes
+
+    def test_passes_score_none(self):
+        engine = DecisionEngine()
+        m = _make_match(
+            odds_1_start=3.00, odds_2_start=2.00,
+        )
+        decisions = engine.decide(m)
+        d_2 = next(d for d in decisions if d.bet_type == "2")
+        assert d_2.passes
+
+
+class TestDecisionEngineDraw:
+    """Ничья branch: kf1 > kf2, kf1 <= 8, kf1 >= 1.5, kf2 >= 1.5, score_diff == 0."""
+
+    def test_passes_all_conditions(self):
+        engine = DecisionEngine()
+        m = _make_match(
+            odds_1_start=3.00, odds_2_start=2.00,
+            score_home=1, score_away=1,
+        )
+        decisions = engine.decide(m)
+        d_x = next(d for d in decisions if d.bet_type == "X")
+        assert d_x.passes
+
+    def test_fails_kf1_too_high(self):
+        engine = DecisionEngine()
+        m = _make_match(
+            odds_1_start=9.00, odds_2_start=2.00,
+            score_home=1, score_away=1,
+        )
+        decisions = engine.decide(m)
+        d_x = next(d for d in decisions if d.bet_type == "X")
+        assert not d_x.passes
+
+    def test_fails_kf1_too_low(self):
+        engine = DecisionEngine()
+        m = _make_match(
+            odds_1_start=1.40, odds_2_start=1.30,
+            score_home=1, score_away=1,
+        )
+        decisions = engine.decide(m)
+        d_x = next(d for d in decisions if d.bet_type == "X")
+        assert not d_x.passes
+
+    def test_fails_kf2_too_low(self):
+        engine = DecisionEngine()
+        m = _make_match(
+            odds_1_start=3.00, odds_2_start=1.40,
+            score_home=1, score_away=1,
+        )
+        decisions = engine.decide(m)
+        d_x = next(d for d in decisions if d.bet_type == "X")
+        assert not d_x.passes
+
+    def test_fails_score_diff_nonzero(self):
+        engine = DecisionEngine()
+        m = _make_match(
+            odds_1_start=3.00, odds_2_start=2.00,
+            score_home=2, score_away=1,
+        )
+        decisions = engine.decide(m)
+        d_x = next(d for d in decisions if d.bet_type == "X")
+        assert not d_x.passes
+
+    def test_passes_score_none(self):
+        engine = DecisionEngine()
+        m = _make_match(
+            odds_1_start=3.00, odds_2_start=2.00,
+        )
+        decisions = engine.decide(m)
+        d_x = next(d for d in decisions if d.bet_type == "X")
+        assert d_x.passes
+
+    def test_boundary_kf1_equals_8(self):
+        engine = DecisionEngine()
+        m = _make_match(
+            odds_1_start=8.00, odds_2_start=2.00,
+            score_home=0, score_away=0,
+        )
+        decisions = engine.decide(m)
+        d_x = next(d for d in decisions if d.bet_type == "X")
+        assert d_x.passes
+
+    def test_kf1_gt_kf2_produces_both_pob2_and_draw(self):
+        """kf1 > kf2 branch produces both Поб2 and Ничья decisions."""
+        engine = DecisionEngine()
+        m = _make_match(odds_1_start=3.00, odds_2_start=2.00)
+        decisions = engine.decide(m)
+        types = {d.bet_type for d in decisions}
         assert "2" in types
         assert "X" in types
-
-    def test_1x_fails_kf1_too_high(self):
-        engine = DecisionEngine()
-        m = _make_match(odds_1_start=9.00, odds_x_start=4.00, odds_2_start=1.50)
-        decisions = engine.decide(m)
-        d_1x = next(d for d in decisions if d.bet_type == "1X")
-        assert not d_1x.passes
-        assert any("kf1=9.0 > 8" in r for r in d_1x.reasons)
-
-    def test_1x_fails_kf1x_too_low(self):
-        engine = DecisionEngine()
-        # kf1x = min(kf1, kfx) = min(2.0, 1.3) = 1.3 < 1.5
-        m = _make_match(odds_1_start=2.00, odds_x_start=1.30, odds_2_start=1.50)
-        decisions = engine.decide(m)
-        d_1x = next(d for d in decisions if d.bet_type == "1X")
-        assert not d_1x.passes
-
-    def test_1x_fails_kf2_too_low(self):
-        engine = DecisionEngine()
-        m = _make_match(odds_1_start=3.00, odds_x_start=3.00, odds_2_start=1.30)
-        decisions = engine.decide(m)
-        d_1x = next(d for d in decisions if d.bet_type == "1X")
-        assert not d_1x.passes
-
-    def test_1_passes(self):
-        engine = DecisionEngine()
-        m = _make_match(odds_1_start=4.00, odds_x_start=3.00, odds_2_start=2.00)
-        decisions = engine.decide(m)
-        d_1 = next(d for d in decisions if d.bet_type == "1")
-        assert d_1.passes
-
-    def test_1_fails_kf2_low(self):
-        engine = DecisionEngine()
-        m = _make_match(odds_1_start=4.00, odds_x_start=3.00, odds_2_start=1.30)
-        decisions = engine.decide(m)
-        d_1 = next(d for d in decisions if d.bet_type == "1")
-        assert not d_1.passes
-
-    def test_2_passes(self):
-        engine = DecisionEngine()
-        m = _make_match(odds_1_start=3.50, odds_x_start=3.00, odds_2_start=2.00)
-        decisions = engine.decide(m)
-        d_2 = next(d for d in decisions if d.bet_type == "2")
-        assert d_2.passes
-
-    def test_2_fails_kf2_too_low(self):
-        engine = DecisionEngine()
-        m = _make_match(odds_1_start=3.50, odds_x_start=3.00, odds_2_start=1.40)
-        decisions = engine.decide(m)
-        d_2 = next(d for d in decisions if d.bet_type == "2")
-        assert not d_2.passes
-
-    def test_x_same_as_1x(self):
-        engine = DecisionEngine()
-        m = _make_match(odds_1_start=4.00, odds_x_start=3.00, odds_2_start=2.00)
-        decisions = engine.decide(m)
-        d_1x = next(d for d in decisions if d.bet_type == "1X")
-        d_x = next(d for d in decisions if d.bet_type == "X")
-        assert d_1x.passes == d_x.passes
-
-
-class TestDecisionEngineKf2GtKf1:
-    """kf2 > kf1 branch (away is underdog)."""
-
-    def test_2_passes(self):
-        engine = DecisionEngine()
-        m = _make_match(odds_1_start=1.80, odds_x_start=3.50, odds_2_start=4.50)
-        decisions = engine.decide(m)
-        d_2 = next(d for d in decisions if d.bet_type == "2")
-        assert d_2.passes
-
-    def test_2_fails_kf2_too_high(self):
-        engine = DecisionEngine()
-        m = _make_match(odds_1_start=1.80, odds_x_start=3.50, odds_2_start=9.00)
-        decisions = engine.decide(m)
-        d_2 = next(d for d in decisions if d.bet_type == "2")
-        assert not d_2.passes
-
-    def test_2_fails_kf1_too_low(self):
-        engine = DecisionEngine()
-        m = _make_match(odds_1_start=1.30, odds_x_start=3.50, odds_2_start=5.00)
-        decisions = engine.decide(m)
-        d_2 = next(d for d in decisions if d.bet_type == "2")
-        assert not d_2.passes
-
-    def test_1_passes(self):
-        engine = DecisionEngine()
-        m = _make_match(odds_1_start=1.80, odds_x_start=3.50, odds_2_start=4.50)
-        decisions = engine.decide(m)
-        d_1 = next(d for d in decisions if d.bet_type == "1")
-        assert d_1.passes
-
-    def test_1_fails_kf1_too_low(self):
-        engine = DecisionEngine()
-        m = _make_match(odds_1_start=1.40, odds_x_start=3.50, odds_2_start=4.50)
-        decisions = engine.decide(m)
-        d_1 = next(d for d in decisions if d.bet_type == "1")
-        assert not d_1.passes
+        assert len(decisions) == 2
 
 
 class TestDecisionEngineEdge:
@@ -157,26 +272,21 @@ class TestDecisionEngineEdge:
 
     def test_get_passing_decisions(self):
         engine = DecisionEngine()
-        m = _make_match(odds_1_start=3.50, odds_x_start=3.20, odds_2_start=2.10)
+        m = _make_match(
+            odds_1_start=2.00, odds_2_start=3.00,
+            score_home=2, score_away=1,
+        )
         passing = engine.get_passing_decisions(m)
         assert all(d.passes for d in passing)
         assert len(passing) > 0
 
-    def test_boundary_kf1_equals_8(self):
+    def test_kf1_lt_kf2_only_pob1(self):
+        """kf1 < kf2 branch produces only Поб1."""
         engine = DecisionEngine()
-        m = _make_match(odds_1_start=8.00, odds_x_start=4.00, odds_2_start=1.50)
+        m = _make_match(odds_1_start=2.00, odds_2_start=3.00)
         decisions = engine.decide(m)
-        d_1x = next(d for d in decisions if d.bet_type == "1X")
-        # kf1 <= 8 should pass
-        assert d_1x.passes
-
-    def test_boundary_kf2_equals_1_5(self):
-        engine = DecisionEngine()
-        m = _make_match(odds_1_start=3.00, odds_x_start=3.00, odds_2_start=1.50)
-        decisions = engine.decide(m)
-        d_2 = next(d for d in decisions if d.bet_type == "2")
-        # kf2 >= 1.5 should pass
-        assert d_2.passes
+        assert len(decisions) == 1
+        assert decisions[0].bet_type == "1"
 
 
 # ─── LeagueSetting model tests ─────────────────────────────────────────

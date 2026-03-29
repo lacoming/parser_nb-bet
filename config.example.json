@@ -11,6 +11,11 @@
     "dev_chat_id": 0,
     "rate_limit_seconds": 1.0
   },
+  "vk": {
+    "token": "",
+    "peer_id": 0,
+    "rate_limit_seconds": 1.0
+  },
   "proxies": {
     "enabled": false,
     "file": "proxies.txt",

@@ -18,6 +18,7 @@ from src.config.schema import (
     TelegramConfig,
     ThresholdsConfig,
     UiConfig,
+    VkConfig,
 )
 
 
@@ -83,6 +84,7 @@ def _parse_raw(raw: dict[str, Any]) -> AppConfig:
     return AppConfig(
         schedule=_make(ScheduleConfig, raw.get("schedule", {})),
         telegram=_make(TelegramConfig, raw.get("telegram", {})),
+        vk=_make(VkConfig, raw.get("vk", {})),
         proxies=_make(ProxiesConfig, raw.get("proxies", {})),
         thresholds=_make(ThresholdsConfig, raw.get("thresholds", {})),
         files=_make(FilesConfig, raw.get("files", {})),
@@ -107,6 +109,10 @@ def _apply_env_overrides(cfg: AppConfig) -> None:
     tg_token = os.environ.get("NB_TG_TOKEN")
     if tg_token:
         cfg.telegram.token = tg_token
+
+    vk_token = os.environ.get("NB_VK_TOKEN")
+    if vk_token:
+        cfg.vk.token = vk_token
 
     dry_run = os.environ.get("NB_DRY_RUN")
     if dry_run in ("1", "true", "True"):

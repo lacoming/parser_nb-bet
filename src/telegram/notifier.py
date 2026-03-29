@@ -172,7 +172,7 @@ class TelegramNotifier:
         if was_pending:
             lines.append("_ранее ожидала_")
         if link:
-            lines.append(esc(link))
+            lines.append(f"[матч на NB]({link})")
         text = "\n".join(lines)
         return self._broadcast(text)
 
@@ -202,7 +202,7 @@ class TelegramNotifier:
         if bet_type:
             lines.append(f"Ставка: {esc(bet_type)}")
         if link:
-            lines.append(esc(link))
+            lines.append(f"[матч на NB]({link})")
         text = "\n".join(lines)
         return self._broadcast(text)
 
@@ -232,7 +232,7 @@ class TelegramNotifier:
         if bet_type:
             lines.append(f"Ставка: {esc(bet_type)}")
         if link:
-            lines.append(esc(link))
+            lines.append(f"[матч на NB]({link})")
         text = "\n".join(lines)
         return self._broadcast(text)
 
@@ -266,7 +266,34 @@ class TelegramNotifier:
             f"Ratio: `{ratio:.2f}` \\(порог `{threshold:.2f}`\\)",
         ]
         if link:
-            lines.append(esc(link))
+            lines.append(f"[матч на NB]({link})")
+        text = "\n".join(lines)
+        return self._broadcast(text)
+
+    def notify_insufficient_funds(
+        self,
+        platform: str,
+        league: str = "",
+        team_home: str = "",
+        team_away: str = "",
+        bet_type: str = "",
+        error_detail: str = "",
+    ) -> list[SendResult]:
+        """Notify that a bet failed due to insufficient funds."""
+        esc = escape_md2
+        plat = esc(platform)
+        lines = [
+            f"*Не хватает средств на {plat}*",
+            f"Ставки на {plat} остановлены до следующего цикла\\.",
+        ]
+        if league:
+            lines.append(f"Матч: {esc(league)}")
+        if team_home and team_away:
+            lines.append(f"{esc(team_home)} \\- {esc(team_away)}")
+        if bet_type:
+            lines.append(f"Ставка: {esc(bet_type)}")
+        if error_detail:
+            lines.append(f"Ответ: `{esc(error_detail[:500])}`")
         text = "\n".join(lines)
         return self._broadcast(text)
 

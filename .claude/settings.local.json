@@ -26,7 +26,9 @@
       "Bash(cd /d/cody/Freelance/parser_nb-bet && ./upx.exe --best --lzma --force dist/parser_nb-bet.exe 2>&1)",
       "Bash(cd /d/cody/Freelance/parser_nb-bet && ./upx.exe --lzma --best dist/parser_nb-bet.exe 2>&1)",
       "WebFetch(domain:nb-bet.com)",
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "Bash(powershell -ExecutionPolicy Bypass -File scripts/build.ps1)",
+      "Bash(.venv/Scripts/python.exe -m PyInstaller --distpath dist --workpath build parser_nb-bet.spec)"
     ]
   }
 }
