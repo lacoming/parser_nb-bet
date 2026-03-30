@@ -70,46 +70,6 @@ def _fmt(val: Optional[float], fmt: str = ":.2f") -> str:
     return f"{val:.2f}"
 
 
-def _score_filter_passes(match: Match, bet_type: str) -> bool:
-    """Check exact score + odds conditions for поб1/поб2/X bets.
-
-    Rules (from customer spec):
-    - поб1 (bet_type '1'): kf1 < kf2, kf1 >= 1.5, kf2 >= 1.5, score diff > 0
-    - поб2 (bet_type '2'): kf2 < kf1, kf1 >= 1.5, kf2 >= 1.5, score diff < 0
-    - X:  kf1 > kf2, kf1 <= 8, kf1 >= 1.5, kf2 >= 1.5, score diff == 0
-    - Other bet types: always pass.
-    """
-    bt = bet_type.upper()
-    if bt not in ("1", "П1", "2", "П2", "X", "НИЧЬЯ"):
-        return True
-
-    diff = match.score_diff
-    kf1 = match.odds_1_start
-    kf2 = match.odds_2_start
-
-    if bt in ("1", "П1", "2", "П2"):
-        # поб1/поб2: both kf1 >= 1.5 and kf2 >= 1.5
-        if kf1 is not None and kf2 is not None:
-            if kf1 < 1.5 or kf2 < 1.5:
-                return False
-        if diff is None:
-            return True
-        if bt in ("1", "П1"):
-            return diff > 0
-        return diff < 0  # поб2
-
-    if bt in ("X", "НИЧЬЯ"):
-        # X: kf1 > kf2, kf1 <= 8, kf1 >= 1.5, kf2 >= 1.5, score diff == 0
-        if kf1 is not None and kf2 is not None:
-            if not (kf1 > kf2 and kf1 <= 8 and kf1 >= 1.5 and kf2 >= 1.5):
-                return False
-        if diff is None:
-            return True
-        return diff == 0
-
-    return True
-
-
 def run_cycle(
     config: AppConfig,
     state: AppState,
@@ -170,13 +130,6 @@ def run_cycle(
         if not setting.check(far_match.odds_1_start, far_match.odds_2_start):
             continue
         target_bet_type = setting.bet_type
-        if not _score_filter_passes(far_match, target_bet_type):
-            log.debug(
-                "Score filter rejected %s bet=%s score=%s-%s",
-                far_match.match_key, target_bet_type,
-                far_match.score_home, far_match.score_away,
-            )
-            continue
         league_roi = setting.roi
         kf_nb = _get_kf_nb(far_match, target_bet_type)
         threshold = _get_default_threshold(config, far_match.league)
@@ -242,13 +195,6 @@ def run_cycle(
             log.debug(
                 "Conditions not met for %s bet=%s: kf1_start=%s kf2_start=%s",
                 match.match_key, target_bet_type, match.odds_1_start, match.odds_2_start,
-            )
-            continue
-        if not _score_filter_passes(match, target_bet_type):
-            log.debug(
-                "Score filter rejected %s bet=%s score=%s-%s",
-                match.match_key, target_bet_type,
-                match.score_home, match.score_away,
             )
             continue
         decision = BetDecision(
