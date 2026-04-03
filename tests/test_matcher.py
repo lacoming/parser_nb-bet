@@ -1,11 +1,12 @@
 """Tests for NB-Kush event matcher."""
 from __future__ import annotations
 
+import json
 from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from src.kush.matcher import EventMatcher
+from src.kush.matcher import EventMatcher, NearMissTracker
 from src.kush.models import KushEvent, MatchResult
 from src.nb.models import Match
 
@@ -366,3 +367,176 @@ class TestBug3_SlugMatching:
         result = matcher.find_best_match(nb, kush)
         # Slug names are swapped but should still score well
         assert result is not None
+
+
+# ---------------------------------------------------------------------------
+# NearMissTracker tests
+# ---------------------------------------------------------------------------
+
+class TestNearMissTracker:
+    def test_record_near_miss(self, tmp_path):
+        nm_path = str(tmp_path / "near_misses.json")
+        tracker = NearMissTracker(near_misses_path=nm_path)
+        tracker.record_near_miss("Невроз", "Нафт Миссан", "Новруз", "Нафт Майсан", 0.65, 0.71)
+        assert len(tracker._near_misses) == 1
+        assert tracker._near_misses[0]["nb_home"] == "Невроз"
+
+    def test_flush_near_misses(self, tmp_path):
+        nm_path = str(tmp_path / "near_misses.json")
+        tracker = NearMissTracker(near_misses_path=nm_path)
+        tracker.record_near_miss("A", "B", "C", "D", 0.65, 0.70)
+        tracker.flush_near_misses()
+        with open(nm_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        assert len(data) == 1
+        assert data[0]["status"] == "pending"
+        # Buffer cleared after flush
+        assert len(tracker._near_misses) == 0
+
+    def test_flush_appends_to_existing(self, tmp_path):
+        nm_path = str(tmp_path / "near_misses.json")
+        # Pre-populate
+        with open(nm_path, "w", encoding="utf-8") as f:
+            json.dump([{"nb_home": "Old", "status": "pending"}], f)
+        tracker = NearMissTracker(near_misses_path=nm_path)
+        tracker.record_near_miss("New", "B", "C", "D", 0.70, 0.75)
+        tracker.flush_near_misses()
+        with open(nm_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        assert len(data) == 2
+
+    def test_rejected_pair_skipped_in_near_miss(self, tmp_path):
+        rejected_path = str(tmp_path / "rejected.json")
+        with open(rejected_path, "w", encoding="utf-8") as f:
+            json.dump(["a|b"], f)
+        tracker = NearMissTracker(
+            near_misses_path=str(tmp_path / "nm.json"),
+            rejected_path=rejected_path,
+        )
+        # "A" and "B" should match rejected pair "a|b"
+        tracker.record_near_miss("A", "X", "B", "Y", 0.65, 0.70)
+        assert len(tracker._near_misses) == 0
+
+    def test_auto_save_alias(self, tmp_path):
+        """Auto-save only works for names with WRatio >= 0.90."""
+        aliases_path = str(tmp_path / "aliases.json")
+        with open(aliases_path, "w", encoding="utf-8") as f:
+            json.dump({}, f)
+        tracker = NearMissTracker(aliases_path=aliases_path)
+        # "Нафт Миссан" vs "Нафт Майсан" = WRatio ~0.82 — below 0.90, skipped
+        # "Невроз" vs "Новруз" = WRatio ~0.67 — below 0.90, skipped
+        # These are handled by manual aliases, not auto-save
+        tracker.auto_save_alias("Невроз", "Нафт Миссан", "Новруз", "Нафт Майсан")
+        with open(aliases_path, "r", encoding="utf-8") as f:
+            aliases = json.load(f)
+        assert len(aliases) == 0  # Both below 0.90 threshold
+
+    def test_auto_save_very_similar_names(self, tmp_path):
+        """Auto-save works for very similar names (WRatio >= 0.90)."""
+        aliases_path = str(tmp_path / "aliases.json")
+        with open(aliases_path, "w", encoding="utf-8") as f:
+            json.dump({}, f)
+        tracker = NearMissTracker(aliases_path=aliases_path)
+        # "Китай U23" vs "Китай (23)" — WRatio ~0.94 after normalize
+        tracker.auto_save_alias("Китай U23", "TeamB", "Китай (23)", "TeamB")
+        with open(aliases_path, "r", encoding="utf-8") as f:
+            aliases = json.load(f)
+        assert "китай u23" in aliases
+        assert aliases["китай u23"] == "китай (23)"
+
+    def test_auto_save_no_duplicate(self, tmp_path):
+        aliases_path = str(tmp_path / "aliases.json")
+        with open(aliases_path, "w", encoding="utf-8") as f:
+            json.dump({"невроз": "новруз"}, f)
+        tracker = NearMissTracker(aliases_path=aliases_path)
+        tracker.auto_save_alias("Невроз", "X", "Новруз", "X")
+        with open(aliases_path, "r", encoding="utf-8") as f:
+            aliases = json.load(f)
+        # Should not duplicate
+        assert len(aliases) == 1
+
+    def test_auto_save_skip_identical_names(self, tmp_path):
+        aliases_path = str(tmp_path / "aliases.json")
+        with open(aliases_path, "w", encoding="utf-8") as f:
+            json.dump({}, f)
+        tracker = NearMissTracker(aliases_path=aliases_path)
+        tracker.auto_save_alias("Liverpool", "Chelsea", "Liverpool", "Chelsea")
+        with open(aliases_path, "r", encoding="utf-8") as f:
+            aliases = json.load(f)
+        assert len(aliases) == 0
+
+    def test_auto_save_skip_dissimilar_names(self, tmp_path):
+        """Should NOT save alias when names are completely different teams."""
+        aliases_path = str(tmp_path / "aliases.json")
+        with open(aliases_path, "w", encoding="utf-8") as f:
+            json.dump({}, f)
+        tracker = NearMissTracker(aliases_path=aliases_path)
+        # Аль-Шорта Багдад and Аль-Гарраф are different teams
+        tracker.auto_save_alias(
+            "Аль-Шорта Багдад", "Аль-Кува Аль-Джавия",
+            "Аль-Гарраф", "Аль-Наджаф",
+        )
+        with open(aliases_path, "r", encoding="utf-8") as f:
+            aliases = json.load(f)
+        assert "аль-шорта багдад" not in aliases
+        assert "аль-кува аль-джавия" not in aliases
+
+    def test_auto_save_only_similar_pair(self, tmp_path):
+        """Should save alias only for the similar pair, skip the dissimilar one."""
+        aliases_path = str(tmp_path / "aliases.json")
+        with open(aliases_path, "w", encoding="utf-8") as f:
+            json.dump({}, f)
+        tracker = NearMissTracker(aliases_path=aliases_path)
+        # Home teams very similar (Китай U23 ≈ Китай (23), WRatio=0.94), away different
+        tracker.auto_save_alias(
+            "Китай U23", "Совсем Другая",
+            "Китай (23)", "Третья Команда",
+        )
+        with open(aliases_path, "r", encoding="utf-8") as f:
+            aliases = json.load(f)
+        assert "китай u23" in aliases  # similar (0.94) — saved
+        assert "совсем другая" not in aliases  # different — skipped
+
+    def test_import_confirmed(self, tmp_path):
+        aliases_path = str(tmp_path / "aliases.json")
+        rejected_path = str(tmp_path / "rejected.json")
+        nm_path = str(tmp_path / "near_misses.json")
+        with open(aliases_path, "w", encoding="utf-8") as f:
+            json.dump({}, f)
+        with open(rejected_path, "w", encoding="utf-8") as f:
+            json.dump([], f)
+        with open(nm_path, "w", encoding="utf-8") as f:
+            json.dump([
+                {"nb_home": "Невроз", "nb_away": "X", "kush_home": "Новруз", "kush_away": "X", "status": "confirmed"},
+                {"nb_home": "Зимбабве", "nb_away": "Y", "kush_home": "Сербия", "kush_away": "Y", "status": "rejected"},
+                {"nb_home": "Pending", "nb_away": "Z", "kush_home": "Other", "kush_away": "Z", "status": "pending"},
+            ], f)
+        tracker = NearMissTracker(
+            near_misses_path=nm_path,
+            rejected_path=rejected_path,
+            aliases_path=aliases_path,
+        )
+        imported = tracker.import_confirmed()
+        assert imported == 1
+        # Check aliases
+        with open(aliases_path, "r", encoding="utf-8") as f:
+            aliases = json.load(f)
+        assert aliases["невроз"] == "новруз"
+        # Check rejected
+        with open(rejected_path, "r", encoding="utf-8") as f:
+            rejected = json.load(f)
+        assert any("зимбабве" in r and "сербия" in r for r in rejected)
+        # Only pending remains in near_misses
+        with open(nm_path, "r", encoding="utf-8") as f:
+            remaining = json.load(f)
+        assert len(remaining) == 1
+        assert remaining[0]["nb_home"] == "Pending"
+
+    def test_is_rejected(self, tmp_path):
+        rejected_path = str(tmp_path / "rejected.json")
+        with open(rejected_path, "w", encoding="utf-8") as f:
+            json.dump(["alpha|beta"], f)
+        tracker = NearMissTracker(rejected_path=rejected_path)
+        assert tracker.is_rejected("Alpha", "Beta") is True
+        assert tracker.is_rejected("Beta", "Alpha") is True  # order-independent
+        assert tracker.is_rejected("Gamma", "Delta") is False

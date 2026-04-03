@@ -113,6 +113,49 @@ class NbSession:
         log.info("NB-Bet logged in as %s", name)
         return True
 
+    def get_json(self, path: str, params: dict | None = None) -> requests.Response:
+        """GET from NB-Bet API with retry and rate-limiting.
+
+        Args:
+            path: API path (e.g. /soccer/events/tips/slug/1).
+            params: Optional query parameters.
+
+        Returns:
+            Response object.
+
+        Raises:
+            NbSessionError: If all retries exhausted.
+        """
+        url = f"{self._api_base}{path}"
+        last_error: Exception | None = None
+
+        for attempt in range(1, self._retries + 1):
+            self._rate_limit()
+            try:
+                resp = self._session.get(
+                    url, params=params, timeout=self._timeout,
+                )
+                if resp.status_code == 200:
+                    return resp
+                log.warning(
+                    "NB GET %s: HTTP %d (attempt %d/%d)",
+                    path, resp.status_code, attempt, self._retries,
+                )
+                last_error = NbSessionError(f"HTTP {resp.status_code}")
+            except requests.RequestException as exc:
+                last_error = exc
+                log.warning(
+                    "NB GET %s: error (attempt %d/%d): %s",
+                    path, attempt, self._retries, exc,
+                )
+
+            if attempt < self._retries:
+                time.sleep(self._retry_delay * attempt)
+
+        raise NbSessionError(
+            f"GET {path} failed after {self._retries} attempts: {last_error}"
+        )
+
     def post_json(self, path: str, data: dict) -> requests.Response:
         """POST JSON to NB-Bet API with retry and rate-limiting.
 

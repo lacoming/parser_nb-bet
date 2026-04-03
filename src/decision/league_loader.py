@@ -196,17 +196,27 @@ def _extract_operator(text: str) -> tuple[Optional[str], str]:
 def _apply_relation(
     setting: LeagueSetting, left: str, op: str, right_var: str,
 ) -> None:
-    """Set kf_relation based on a variable-to-variable comparison."""
-    # Normalize to canonical form: "kf1>kf2" or "kf1<kf2"
+    """Set kf_relation based on a variable-to-variable comparison.
+
+    Preserves >= vs > distinction: "kf1>=kf2", "kf1>kf2", "kf1<=kf2", "kf1<kf2".
+    """
     if left == "kf1" and right_var == "kf2":
-        if op in (">", ">="):
+        if op == ">=":
+            setting.kf_relation = "kf1>=kf2"
+        elif op == ">":
             setting.kf_relation = "kf1>kf2"
-        elif op in ("<", "<="):
+        elif op == "<=":
+            setting.kf_relation = "kf1<=kf2"
+        elif op == "<":
             setting.kf_relation = "kf1<kf2"
     elif left == "kf2" and right_var == "kf1":
-        if op in (">", ">="):
-            setting.kf_relation = "kf1<kf2"  # kf2 > kf1 means kf1 < kf2
-        elif op in ("<", "<="):
+        if op == ">=":
+            setting.kf_relation = "kf1<=kf2"  # kf2 >= kf1 means kf1 <= kf2
+        elif op == ">":
+            setting.kf_relation = "kf1<kf2"   # kf2 > kf1 means kf1 < kf2
+        elif op == "<=":
+            setting.kf_relation = "kf1>=kf2"
+        elif op == "<":
             setting.kf_relation = "kf1>kf2"
 
 

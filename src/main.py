@@ -152,20 +152,39 @@ def main() -> None:
         rate_limit=config.vk.rate_limit_seconds,
     )
 
+    # Initialize alias system (near-misses tracker)
+    from src.kush.matcher import NearMissTracker
+    from src.kush.normalizer import load_aliases
+    from src.paths import writable_data_path
+
+    aliases_path = writable_data_path("sl_teams_zamen.json")
+    rejected_path = writable_data_path("sl_teams_rejected.json")
+    logs_dir = config.files.logs_dir or "logs"
+    near_misses_path = os.path.join(logs_dir, "near_misses.json")
+
+    load_aliases(aliases_path)
+    tracker = NearMissTracker(
+        near_misses_path=near_misses_path,
+        rejected_path=rejected_path,
+        aliases_path=aliases_path,
+    )
+
     def do_cycle() -> CycleStats:
         # Hot-reload leagues each cycle (C3 fix) — changes take effect without restart
         nonlocal leagues_path
         if not leagues_path or not os.path.isfile(leagues_path):
-            app_dir = (
+            cycle_app_dir = (
                 os.path.dirname(sys.executable)
                 if getattr(sys, "frozen", False)
                 else os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
             )
-            discovered = find_leagues_xlsx(app_dir)
+            discovered = find_leagues_xlsx(cycle_app_dir)
             if discovered:
                 leagues_path = discovered
         current_settings = load_league_settings(leagues_path) if leagues_path else []
         current_filter = LeagueFilter(settings=current_settings)
+        # Hot-reload aliases each cycle
+        load_aliases(aliases_path)
         # Fresh Excel writer each cycle (rows written to monthly file via append)
         cycle_excel = ExcelWriter(output_dir=config.files.output_dir)
         return run_cycle(
@@ -176,6 +195,7 @@ def main() -> None:
             excel_writer=cycle_excel,
             telegram=telegram,
             proxies=proxies,
+            tracker=tracker,
         )
 
     # Run mode

@@ -38,6 +38,7 @@ class NbBetResult:
     dry_run: bool = False
     error: str = ""
     insufficient_funds: bool = False  # NB rejected: not enough balance
+    already_placed: bool = False  # NB rejected: tip already exists for this match
     tip_id: Optional[int] = None
     timestamp: datetime = field(default_factory=datetime.now)
 
@@ -58,11 +59,28 @@ _INSUFFICIENT_FUNDS_MARKERS = [
     "баланс",
 ]
 
+_ALREADY_PLACED_MARKERS = [
+    "уже сделали",
+    "уже делали",
+    "уже существует",
+    "already",
+    "duplicate",
+    "вы уже",
+    "прогноз уже",
+    "ранее",
+]
+
 
 def _is_insufficient_funds_nb(text: str) -> bool:
     """Check if NB API error indicates insufficient funds."""
     lower = text.lower()
     return any(marker in lower for marker in _INSUFFICIENT_FUNDS_MARKERS)
+
+
+def _is_already_placed(text: str) -> bool:
+    """Check if NB API error indicates tip was already placed."""
+    lower = text.lower()
+    return any(marker in lower for marker in _ALREADY_PLACED_MARKERS)
 
 
 class NbBetPlacer:
@@ -71,6 +89,25 @@ class NbBetPlacer:
     def __init__(self, session: NbSession, config: NbConfig):
         self._session = session
         self._config = config
+
+    def check_existing_tip(self, match: Match) -> bool:
+        """Check if a tip already exists for this match on NB-Bet.
+
+        Fetches the tips page for the match slug and looks for an existing
+        tip by the current user. Returns True if tip already exists.
+        """
+        if not match.nb_slug:
+            return False
+
+        path = f"/soccer/events/tips/{match.nb_slug}/1"
+        try:
+            resp = self._session.get_json(path)
+            body = resp.json()
+        except Exception as exc:
+            log.debug("check_existing_tip failed for %s: %s", match.nb_slug, exc)
+            return False
+
+        return _response_has_user_tip(body)
 
     def place_tip(
         self,
@@ -105,6 +142,21 @@ class NbBetPlacer:
             )
 
         stake = self._config.default_stake
+
+        # Pre-check: does a tip already exist for this match?
+        if not dry_run and self.check_existing_tip(match):
+            log.info(
+                "NB tip SKIP (already exists): %s %s on %s",
+                bet_type, odd_type, match.nb_slug,
+            )
+            return NbBetResult(
+                match_key=match.match_key,
+                bet_type=bet_type,
+                odd_type=odd_type,
+                stake=0,
+                success=True,  # treat as success — tip exists, no action needed
+                already_placed=True,
+            )
 
         if dry_run:
             log.info(
@@ -153,10 +205,21 @@ class NbBetPlacer:
                 error="Response not JSON",
             )
 
-        # Check for error/insufficient funds in response body
+        # Check for error/insufficient funds/duplicate in response body
         error_msg = _extract_nb_error(body)
         if error_msg:
             no_funds = _is_insufficient_funds_nb(error_msg)
+            dup = _is_already_placed(error_msg)
+            if dup:
+                log.info("NB tip already placed (POST): %s — %s", match.match_key, error_msg)
+                return NbBetResult(
+                    match_key=match.match_key,
+                    bet_type=bet_type,
+                    odd_type=odd_type,
+                    stake=stake,
+                    success=True,  # treat as success — tip exists
+                    already_placed=True,
+                )
             if no_funds:
                 log.warning("Insufficient funds on NB: %s", error_msg)
             else:
@@ -250,3 +313,40 @@ def _extract_tip_id(body: dict) -> Optional[int]:
     except (TypeError, ValueError, KeyError):
         pass
     return None
+
+
+def _response_has_user_tip(body: dict) -> bool:
+    """Check if NB-Bet tips response already contains a tip by the current user.
+
+    The tips page response format: {"data": {"1": [{"1": tip_id, "13": true, ...}, ...]}}
+    Field "13" == true indicates the tip belongs to the logged-in user.
+
+    Also checks for error messages that indicate an existing tip.
+    """
+    if not isinstance(body, dict):
+        return False
+
+    # Check if error message indicates existing tip
+    error_msg = _extract_nb_error(body)
+    if error_msg and _is_already_placed(error_msg):
+        return True
+
+    # Check tips list for user's own tip (field "13" = is_mine)
+    try:
+        data = body.get("data", {})
+        if not isinstance(data, dict):
+            return False
+        tips_list = data.get("1", [])
+        if not isinstance(tips_list, list):
+            return False
+        for tip in tips_list:
+            if isinstance(tip, dict) and tip.get("13") is True:
+                log.debug(
+                    "Found existing user tip: id=%s",
+                    tip.get("1", "?"),
+                )
+                return True
+    except (TypeError, KeyError):
+        pass
+
+    return False

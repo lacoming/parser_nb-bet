@@ -5,6 +5,7 @@ One cycle: NB-Bet -> filter -> decide -> Kush match -> bet -> excel -> telegram.
 from __future__ import annotations
 
 import logging
+import os
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -15,7 +16,7 @@ from src.excel.models import UnifiedRow
 from src.excel.writer import ExcelWriter
 from src.kush.bet_placer import BetPlacer
 from src.kush.client import KushClient
-from src.kush.matcher import EventMatcher
+from src.kush.matcher import EventMatcher, NearMissTracker
 from src.kush.session import KushSession
 from src.nb.bet_placer import NbBetPlacer
 from src.nb.client import NbClient
@@ -25,6 +26,13 @@ from src.state import AppState
 from src.vk.notifier import VkNotifier
 
 log = logging.getLogger("parser_nb_bet.scheduler.cycle_runner")
+
+
+def _resolve_writable_data_path(filename: str) -> str:
+    """Resolve path to a writable file in assets/data/ (next to exe, not inside)."""
+    from src.paths import writable_data_path
+    return writable_data_path(filename)
+
 
 # Decision engine bet types -> Kush bet types
 _DECISION_TO_KUSH: dict[str, str] = {
@@ -70,46 +78,6 @@ def _fmt(val: Optional[float], fmt: str = ":.2f") -> str:
     return f"{val:.2f}"
 
 
-def _score_filter_passes(match: Match, bet_type: str) -> bool:
-    """Check exact score + odds conditions for поб1/поб2/X bets.
-
-    Rules (from customer spec):
-    - поб1 (bet_type '1'): kf1 < kf2, kf1 >= 1.5, kf2 >= 1.5, score diff > 0
-    - поб2 (bet_type '2'): kf2 < kf1, kf1 >= 1.5, kf2 >= 1.5, score diff < 0
-    - X:  kf1 > kf2, kf1 <= 8, kf1 >= 1.5, kf2 >= 1.5, score diff == 0
-    - Other bet types: always pass.
-    """
-    bt = bet_type.upper()
-    if bt not in ("1", "П1", "2", "П2", "X", "НИЧЬЯ"):
-        return True
-
-    diff = match.score_diff
-    kf1 = match.odds_1_start
-    kf2 = match.odds_2_start
-
-    if bt in ("1", "П1", "2", "П2"):
-        # поб1/поб2: both kf1 >= 1.5 and kf2 >= 1.5
-        if kf1 is not None and kf2 is not None:
-            if kf1 < 1.5 or kf2 < 1.5:
-                return False
-        if diff is None:
-            return True
-        if bt in ("1", "П1"):
-            return diff > 0
-        return diff < 0  # поб2
-
-    if bt in ("X", "НИЧЬЯ"):
-        # X: kf1 > kf2, kf1 <= 8, kf1 >= 1.5, kf2 >= 1.5, score diff == 0
-        if kf1 is not None and kf2 is not None:
-            if not (kf1 > kf2 and kf1 <= 8 and kf1 >= 1.5 and kf2 >= 1.5):
-                return False
-        if diff is None:
-            return True
-        return diff == 0
-
-    return True
-
-
 def run_cycle(
     config: AppConfig,
     state: AppState,
@@ -118,12 +86,21 @@ def run_cycle(
     excel_writer: ExcelWriter,
     telegram: VkNotifier,
     proxies: Optional[list[str]] = None,
+    tracker: Optional[NearMissTracker] = None,
 ) -> CycleStats:
     """Execute one full cycle.
 
     Returns CycleStats with counts.
     """
     stats = CycleStats()
+
+    # Import confirmed near-misses into aliases at cycle start
+    if tracker:
+        imported = tracker.import_confirmed()
+        if imported:
+            from src.kush.normalizer import load_aliases
+            aliases_path = _resolve_writable_data_path("sl_teams_zamen.json")
+            load_aliases(aliases_path)
 
     # 1. Fetch matches from NB-Bet
     log.info("Fetching NB-Bet matches...")
@@ -168,15 +145,41 @@ def run_cycle(
         if not setting:
             continue
         if not setting.check(far_match.odds_1_start, far_match.odds_2_start):
+            if far_match.odds_1_start is None or far_match.odds_2_start is None:
+                reason = "нет кф старт"
+                log.warning(
+                    "Skipping %s: missing start odds (kf1=%s, kf2=%s)",
+                    far_match.match_key, far_match.odds_1_start, far_match.odds_2_start,
+                )
+            else:
+                reason = "условие"
+                log.debug(
+                    "Conditions not met for far %s bet=%s: kf1=%s kf2=%s",
+                    far_match.match_key, setting.bet_type,
+                    far_match.odds_1_start, far_match.odds_2_start,
+                )
+            excel_writer.add_row(UnifiedRow(
+                date=far_match.start_time_utc.strftime("%d.%m.%Y"),
+                time=far_match.start_time_utc.strftime("%H:%M"),
+                league=far_match.league,
+                team_home=far_match.team_home,
+                team_away=far_match.team_away,
+                bet_type=setting.bet_type,
+                kf1_start=_fmt(far_match.odds_1_start),
+                kfx_start=_fmt(far_match.odds_x_start),
+                kf2_start=_fmt(far_match.odds_2_start),
+                kf_nb="",
+                min_kf_kush="",
+                nb_placed="-",
+                kush_placed="-",
+                kush_reason=reason,
+                kf_kush="",
+                kush_date="",
+                kush_time="",
+                link=far_match.nb_url,
+            ))
             continue
         target_bet_type = setting.bet_type
-        if not _score_filter_passes(far_match, target_bet_type):
-            log.debug(
-                "Score filter rejected %s bet=%s score=%s-%s",
-                far_match.match_key, target_bet_type,
-                far_match.score_home, far_match.score_away,
-            )
-            continue
         league_roi = setting.roi
         kf_nb = _get_kf_nb(far_match, target_bet_type)
         threshold = _get_default_threshold(config, far_match.league)
@@ -239,17 +242,38 @@ def run_cycle(
         league_roi = setting.roi
         target_bet_type = setting.bet_type
         if not setting.check(match.odds_1_start, match.odds_2_start):
-            log.debug(
-                "Conditions not met for %s bet=%s: kf1_start=%s kf2_start=%s",
-                match.match_key, target_bet_type, match.odds_1_start, match.odds_2_start,
-            )
-            continue
-        if not _score_filter_passes(match, target_bet_type):
-            log.debug(
-                "Score filter rejected %s bet=%s score=%s-%s",
-                match.match_key, target_bet_type,
-                match.score_home, match.score_away,
-            )
+            if match.odds_1_start is None or match.odds_2_start is None:
+                reason = "нет кф старт"
+                log.warning(
+                    "Skipping %s: missing start odds (kf1=%s, kf2=%s)",
+                    match.match_key, match.odds_1_start, match.odds_2_start,
+                )
+            else:
+                reason = "условие"
+                log.debug(
+                    "Conditions not met for %s bet=%s: kf1_start=%s kf2_start=%s",
+                    match.match_key, target_bet_type, match.odds_1_start, match.odds_2_start,
+                )
+            excel_writer.add_row(UnifiedRow(
+                date=match.start_time_utc.strftime("%d.%m.%Y"),
+                time=match.start_time_utc.strftime("%H:%M"),
+                league=match.league,
+                team_home=match.team_home,
+                team_away=match.team_away,
+                bet_type=target_bet_type,
+                kf1_start=_fmt(match.odds_1_start),
+                kfx_start=_fmt(match.odds_x_start),
+                kf2_start=_fmt(match.odds_2_start),
+                kf_nb="",
+                min_kf_kush="",
+                nb_placed="-",
+                kush_placed="-",
+                kush_reason=reason,
+                kf_kush="",
+                kush_date="",
+                kush_time="",
+                link=match.nb_url,
+            ))
             continue
         decision = BetDecision(
             bet_type=target_bet_type,
@@ -272,9 +296,10 @@ def run_cycle(
             )
             nb_session.login(config.nb.login, config.nb.password)
             nb_placer = NbBetPlacer(nb_session, config.nb)
-        except Exception:
+        except Exception as exc:
             log.exception("NB-Bet login failed")
             stats.errors += 1
+            telegram.notify_critical(f"NB-Bet login failed: {exc}")
 
     nb_funds_exhausted = False
     if nb_placer:
@@ -297,7 +322,10 @@ def run_cycle(
                 )
                 nb_funds_exhausted = True
                 break
-            if nb_result.success:
+            if nb_result.already_placed:
+                state.record_nb_placed(match.match_key)
+                log.info("NB tip ALREADY EXISTS: %s %s (skipped)", match.match_key, decision.bet_type)
+            elif nb_result.success:
                 stats.nb_placed += 1
                 state.record_nb_placed(match.match_key)
                 log.info("NB tip OK: %s %s", match.match_key, decision.bet_type)
@@ -323,7 +351,10 @@ def run_cycle(
                         error_detail=nb_result.error,
                     )
                     break
-                if nb_result.success:
+                if nb_result.already_placed:
+                    state.record_nb_placed(far_match.match_key)
+                    log.info("NB tip ALREADY EXISTS (far): %s %s (skipped)", far_match.match_key, bet_type)
+                elif nb_result.success:
                     stats.nb_placed += 1
                     state.record_nb_placed(far_match.match_key)
                     log.info("NB tip OK (far): %s %s", far_match.match_key, bet_type)
@@ -349,19 +380,6 @@ def run_cycle(
             except Exception:
                 log.exception("Failed to save Excel")
                 stats.errors += 1
-        telegram.notify_cycle_summary(
-            total_matches=stats.total_matches,
-            filtered=stats.filtered,
-            decided=0,
-            matched=0,
-            placed=0,
-            missing=0,
-            errors=stats.errors,
-            dry_run=config.kush.dry_run,
-            pending=stats.pending,
-            rejected=stats.rejected,
-            nb_placed=stats.nb_placed,
-        )
         return stats
 
     # 4. Kush session and matching
@@ -388,6 +406,7 @@ def run_cycle(
     matcher = EventMatcher(
         time_tolerance_hours=config.kush.match_time_tolerance_hours,
         min_confidence=config.kush.min_confidence,
+        tracker=tracker,
     )
 
     bet_placer = BetPlacer(
@@ -470,6 +489,26 @@ def run_cycle(
         try:
             if kf_nb is None or kf_nb <= 0:
                 log.warning("No NB odds for %s on %s", decision.bet_type, match.match_key)
+                excel_writer.add_row(UnifiedRow(
+                    date=match.start_time_utc.strftime("%d.%m.%Y"),
+                    time=match.start_time_utc.strftime("%H:%M"),
+                    league=match.league,
+                    team_home=match.team_home,
+                    team_away=match.team_away,
+                    bet_type=decision.bet_type,
+                    kf1_start=_fmt(match.odds_1_start),
+                    kfx_start=_fmt(match.odds_x_start),
+                    kf2_start=_fmt(match.odds_2_start),
+                    kf_nb="",
+                    min_kf_kush="",
+                    nb_placed=is_nb,
+                    kush_placed="-",
+                    kush_reason="нет кф НБ",
+                    kf_kush="",
+                    kush_date="",
+                    kush_time="",
+                    link=match.nb_url,
+                ))
                 continue
 
             bet_type_kush = _to_kush_bet_type(decision.bet_type)
@@ -592,29 +631,32 @@ def run_cycle(
                     link=match.nb_url,
                 ))
 
-                telegram.notify_ratio_rejected(
-                    match_key=match.match_key,
-                    bet_type=bet_result.bet_type,
-                    kf_nb=bet_result.kf_nb,
-                    kf_kush=bet_result.kf_kush,
-                    ratio=bet_result.ratio,
-                    threshold=bet_result.threshold,
-                    league=match.league,
-                    team_home=match.team_home,
-                    team_away=match.team_away,
-                    match_time=match.start_time_utc.strftime("%H:%M"),
-                    match_date=match.start_time_utc.strftime("%d.%m.%Y"),
-                    odds_1=_fmt(match.odds_1_start),
-                    odds_x=_fmt(match.odds_x_start),
-                    odds_2=_fmt(match.odds_2_start),
-                    link=match.nb_url,
-                )
                 log.info(
                     "Ratio rejected: %s ratio=%.3f threshold=%.2f",
                     match.match_key, bet_result.ratio, bet_result.threshold,
                 )
             else:
                 log.warning("Bet failed: %s", bet_result.summary)
+                excel_writer.add_row(UnifiedRow(
+                    date=match.start_time_utc.strftime("%d.%m.%Y"),
+                    time=match.start_time_utc.strftime("%H:%M"),
+                    league=match.league,
+                    team_home=match.team_home,
+                    team_away=match.team_away,
+                    bet_type=decision.bet_type,
+                    kf1_start=_fmt(match.odds_1_start),
+                    kfx_start=_fmt(match.odds_x_start),
+                    kf2_start=_fmt(match.odds_2_start),
+                    kf_nb=_fmt(kf_nb),
+                    min_kf_kush=_fmt(min_kf),
+                    nb_placed=is_nb,
+                    kush_placed="-",
+                    kush_reason=f"ошибка: {bet_result.error[:50]}" if bet_result.error else "ошибка",
+                    kf_kush=_fmt(bet_result.kf_kush),
+                    kush_date="",
+                    kush_time="",
+                    link=match.nb_url,
+                ))
                 state.record_processed(match.match_key)
         except Exception:
             log.exception("Error placing bet for %s", match.match_key)
@@ -629,20 +671,9 @@ def run_cycle(
             log.exception("Failed to save Excel")
             stats.errors += 1
 
-    # 7. Cycle summary
-    telegram.notify_cycle_summary(
-        total_matches=stats.total_matches,
-        filtered=stats.filtered,
-        decided=stats.decided,
-        matched=stats.matched,
-        placed=stats.placed,
-        missing=stats.missing,
-        errors=stats.errors,
-        dry_run=config.kush.dry_run,
-        pending=stats.pending,
-        rejected=stats.rejected,
-        nb_placed=stats.nb_placed,
-    )
+    # 7. Flush near-misses to file
+    if tracker:
+        tracker.flush_near_misses()
 
     log.info(
         "Cycle done: %d total, %d filtered, %d decided, %d matched, "

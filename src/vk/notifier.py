@@ -348,19 +348,28 @@ class VkNotifier:
             log.error("docs.getMessagesUploadServer failed: %s", msg)
             return [SendResult(ok=False, peer_id=self.peer_id, error=f"getUploadServer: {msg}")]
 
-        # Step 2: upload file to VK server
+        # Step 2: upload file to VK server (with retry — VK upload servers can be slow)
         filename = os.path.basename(file_path)
-        try:
-            with open(file_path, "rb") as f:
-                upload_resp = requests.post(
-                    upload_url,
-                    files={"file": (filename, f)},
-                    timeout=self.timeout * 2,
-                )
-            upload_data = upload_resp.json()
-        except requests.RequestException as e:
-            log.error("File upload failed: %s", e)
-            return [SendResult(ok=False, peer_id=self.peer_id, error=f"upload: {e}")]
+        upload_data = None
+        last_upload_err = None
+        for attempt in range(1, 3):
+            try:
+                with open(file_path, "rb") as f:
+                    upload_resp = requests.post(
+                        upload_url,
+                        files={"file": (filename, f)},
+                        timeout=60,
+                    )
+                upload_data = upload_resp.json()
+                break
+            except requests.RequestException as e:
+                last_upload_err = e
+                log.warning("File upload attempt %d failed: %s", attempt, e)
+                if attempt < 2:
+                    time.sleep(3)
+        if upload_data is None:
+            log.error("File upload failed after retries: %s", last_upload_err)
+            return [SendResult(ok=False, peer_id=self.peer_id, error=f"upload: {last_upload_err}")]
 
         file_field = upload_data.get("file")
         if not file_field:

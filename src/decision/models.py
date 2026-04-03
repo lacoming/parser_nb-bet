@@ -54,7 +54,7 @@ class LeagueSetting:
     max_kf1: float = 999.0
     min_kf2: float = 0.0
     max_kf2: float = 999.0
-    kf_relation: str = ""  # "kf1>kf2" | "kf1<kf2" | ""
+    kf_relation: str = ""  # "kf1>kf2" | "kf1>=kf2" | "kf1<kf2" | "kf1<=kf2" | ""
 
     def check(self, kf1: float | None, kf2: float | None) -> bool:
         """Check if match odds satisfy this setting's conditions.
@@ -69,7 +69,11 @@ class LeagueSetting:
             return False
         if self.kf_relation == "kf1>kf2" and not (kf1 > kf2):
             return False
+        if self.kf_relation == "kf1>=kf2" and not (kf1 >= kf2):
+            return False
         if self.kf_relation == "kf1<kf2" and not (kf1 < kf2):
+            return False
+        if self.kf_relation == "kf1<=kf2" and not (kf1 <= kf2):
             return False
         return True
 

@@ -42,7 +42,7 @@
     "password": "",
     "dry_run": true,
     "default_stake": 100,
-    "match_time_tolerance_hours": 2,
+    "match_time_tolerance_hours": 5,
     "min_confidence": 0.80
   },
   "nb": {

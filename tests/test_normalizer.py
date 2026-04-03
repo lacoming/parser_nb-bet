@@ -1,7 +1,11 @@
 """Tests for team name normalizer."""
 from __future__ import annotations
 
-from src.kush.normalizer import normalize, _transliterate
+import json
+import os
+import tempfile
+
+from src.kush.normalizer import normalize, _transliterate, load_aliases, _apply_aliases, _aliases
 
 
 class TestNormalize:
@@ -41,6 +45,50 @@ class TestNormalize:
 
     def test_strip(self):
         assert normalize("  Team A  ") == "team a"
+
+
+class TestAliases:
+    def setup_method(self):
+        """Reset aliases before each test."""
+        import src.kush.normalizer as mod
+        mod._aliases = {}
+
+    def test_load_aliases_from_file(self, tmp_path):
+        aliases_file = tmp_path / "sl_teams_zamen.json"
+        aliases_file.write_text(json.dumps({"невроз": "новруз", "миссан": "майсан"}), encoding="utf-8")
+        count = load_aliases(str(aliases_file))
+        assert count == 2
+
+    def test_load_aliases_missing_file(self, tmp_path):
+        count = load_aliases(str(tmp_path / "nonexistent.json"))
+        assert count == 0
+
+    def test_alias_applied_full_name(self, tmp_path):
+        aliases_file = tmp_path / "sl_teams_zamen.json"
+        aliases_file.write_text(json.dumps({"невроз": "новруз"}), encoding="utf-8")
+        load_aliases(str(aliases_file))
+        result = normalize("Невроз")
+        assert "novruz" in result
+
+    def test_alias_applied_word_level(self, tmp_path):
+        aliases_file = tmp_path / "sl_teams_zamen.json"
+        aliases_file.write_text(json.dumps({"миссан": "майсан"}), encoding="utf-8")
+        load_aliases(str(aliases_file))
+        result = normalize("Нафт Миссан")
+        assert "maysan" in result
+        assert "missan" not in result
+
+    def test_alias_not_applied_when_no_match(self, tmp_path):
+        aliases_file = tmp_path / "sl_teams_zamen.json"
+        aliases_file.write_text(json.dumps({"невроз": "новруз"}), encoding="utf-8")
+        load_aliases(str(aliases_file))
+        result = normalize("Спартак")
+        assert "spartak" in result
+
+    def test_normalize_without_aliases(self):
+        """Without loading aliases, normalize works as before."""
+        result = normalize("Невроз")
+        assert "nevroz" in result
 
 
 class TestTransliterate:
