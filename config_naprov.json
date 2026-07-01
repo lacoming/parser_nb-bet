@@ -1,0 +1,57 @@
+{
+  "schedule": {
+    "start_time_msk": "08:00",
+    "interval_hours": 4,
+    "window_days": 14,
+    "enabled": true
+  },
+  "telegram": {
+    "token": "7709405248:AAG4Nf119dpTKzJ7q_8ZyyrgB87MgNWiYK8",
+    "chat_ids": [
+      836497493
+    ],
+    "dev_chat_id": 836497493,
+    "rate_limit_seconds": 1.0
+  },
+  "proxies": {
+    "enabled": false,
+    "file": "proxies.txt",
+    "rotate": true
+  },
+  "thresholds": {
+    "roi": 0.05,
+    "default_ratio": 1.1,
+    "big_league_ratio": 1.05,
+    "big_leagues": []
+  },
+  "files": {
+    "leagues_xlsx_path": "na_prov.xlsx",
+    "output_dir": "output",
+    "logs_dir": "logs"
+  },
+  "ui": {
+    "tray_enabled": true,
+    "icon_path": "assets/icon.ico"
+  },
+  "kush": {
+    "base_url": "https://kushvsporte.ru/",
+    "login": "lacomings",
+    "password": "uU3-hcV-FqG-QRv",
+    "dry_run": true,
+    "default_stake": 100,
+    "match_time_tolerance_hours": 5,
+    "min_confidence": 0.8
+  },
+  "nb": {
+    "base_url": "https://nb-bet.com/Results",
+    "timeout_seconds": 30,
+    "retries": 3,
+    "retry_delay_seconds": 5
+  },
+  "logging": {
+    "level": "DEBUG",
+    "max_bytes": 10485760,
+    "backup_count": 5,
+    "format": "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+  }
+}

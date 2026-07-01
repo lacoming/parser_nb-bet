@@ -114,7 +114,6 @@ def run_cycle(
     except Exception:
         log.exception("Failed to fetch NB-Bet matches")
         stats.errors += 1
-        telegram.notify_critical("Failed to fetch NB-Bet matches")
         return stats
 
     # 2. Filter by leagues
@@ -296,10 +295,9 @@ def run_cycle(
             )
             nb_session.login(config.nb.login, config.nb.password)
             nb_placer = NbBetPlacer(nb_session, config.nb)
-        except Exception as exc:
+        except Exception:
             log.exception("NB-Bet login failed")
             stats.errors += 1
-            telegram.notify_critical(f"NB-Bet login failed: {exc}")
 
     nb_funds_exhausted = False
     if nb_placer:
@@ -312,14 +310,6 @@ def run_cycle(
             )
             if nb_result.insufficient_funds:
                 log.warning("NB insufficient funds — stopping NB bets this cycle")
-                telegram.notify_insufficient_funds(
-                    platform="NB-Bet",
-                    league=match.league,
-                    team_home=match.team_home,
-                    team_away=match.team_away,
-                    bet_type=decision.bet_type,
-                    error_detail=nb_result.error,
-                )
                 nb_funds_exhausted = True
                 break
             if nb_result.already_placed:
@@ -342,14 +332,6 @@ def run_cycle(
                 )
                 if nb_result.insufficient_funds:
                     log.warning("NB insufficient funds (far) — stopping NB bets this cycle")
-                    telegram.notify_insufficient_funds(
-                        platform="NB-Bet",
-                        league=far_match.league,
-                        team_home=far_match.team_home,
-                        team_away=far_match.team_away,
-                        bet_type=bet_type,
-                        error_detail=nb_result.error,
-                    )
                     break
                 if nb_result.already_placed:
                     state.record_nb_placed(far_match.match_key)
@@ -375,8 +357,7 @@ def run_cycle(
         log.info("No passing decisions for near-window matches")
         if excel_writer.row_count > 0:
             try:
-                path = excel_writer.save()
-                telegram.send_document(path, caption="Результаты цикла")
+                excel_writer.save()
             except Exception:
                 log.exception("Failed to save Excel")
                 stats.errors += 1
@@ -400,7 +381,6 @@ def run_cycle(
     except Exception:
         log.exception("Failed to connect to Kush")
         stats.errors += 1
-        telegram.notify_critical("Failed to connect to Kush")
         return stats
 
     matcher = EventMatcher(
@@ -551,8 +531,8 @@ def run_cycle(
                     link=match.nb_url,
                 ))
 
-                # TG notification with dedup [B4]
-                if state.record_tg_notified_kush(match.match_key):
+                # TG notification only for matches that were previously pending [B4]
+                if was_pending and state.record_tg_notified_kush(match.match_key):
                     telegram.notify_placed(
                         match_key=match.match_key,
                         bet_type=bet_result.bet_type,
@@ -595,14 +575,6 @@ def run_cycle(
                     kush_time="",
                     link=match.nb_url,
                 ))
-                telegram.notify_insufficient_funds(
-                    platform="Kush",
-                    league=match.league,
-                    team_home=match.team_home,
-                    team_away=match.team_away,
-                    bet_type=bet_result.bet_type,
-                    error_detail=bet_result.error,
-                )
                 # Don't mark as processed — retry next cycle
                 break
             elif not bet_result.ratio_passes and bet_result.kf_kush > 0:
@@ -665,8 +637,7 @@ def run_cycle(
     # 6. Save Excel (if any rows)
     if excel_writer.row_count > 0:
         try:
-            path = excel_writer.save()
-            telegram.send_document(path, caption="Результаты цикла")
+            excel_writer.save()
         except Exception:
             log.exception("Failed to save Excel")
             stats.errors += 1
